@@ -88,32 +88,55 @@ Individually:
 The build is a static bundle with relative asset paths, so it deploys anywhere. `base` is
 env-driven:
 
-### GitHub Pages (the default, free)
+### GitHub Pages — free, and what the workflow is already set up for
 
-Push to `main`. `.github/workflows/deploy.yml` runs CI, builds with
-`PAIRTRACK_BASE=/<repo-name>/`, and publishes. Enable Pages once, in
-**Settings → Pages → Source → GitHub Actions**.
+Six steps. You only do this once.
 
-**The repository must be public** for Pages on a free account, and the published site is
-served publicly either way. That is fine here and is the whole point of the design: *the
-repository never contains any job data*, so repository visibility is not the security
-boundary. The encryption on the device is. Source code being readable does not weaken it —
-that is how all real cryptography works.
+**1.** Create a **public** repository on GitHub called `pairtrack`. Do not add a README,
+a .gitignore or a licence — this project already has them.
 
-### Cloudflare Pages + Cloudflare Access (free, strongest)
+> It has to be public: GitHub Pages only publishes from a private repo on a paid plan.
+> That is fine here and it is the whole point of the design — *the repository never
+> contains any job data*, so repository visibility is not what protects it. The
+> encryption on the phone is. Source code being readable does not weaken that; that is
+> how all real cryptography works.
 
-Also free, and it puts a real login gate (email one-time code) in front of the whole site
-on top of the encryption. About 15 minutes to set up.
+**2.** Point this folder at it, using your own username:
 
 ```bash
-PAIRTRACK_BASE=/ npm run build
+git remote add origin https://github.com/YOUR-USERNAME/pairtrack.git
 ```
 
-Point Cloudflare Pages at the repo with build command `npm run build`, output directory
-`dist`, and environment variable `PAIRTRACK_BASE=/`. Then add an Access policy for the
-one email address that should reach it. The `_headers` file the build writes is picked up
-automatically, which also gets you `frame-ancestors` — see
-[docs/SECURITY.md](docs/SECURITY.md) §7.
+**3.** Send the code up:
+
+```bash
+git push -u origin main && git push origin v1.0.0
+```
+
+**4.** On GitHub, go to **Settings → Pages**, and under *Source* choose
+**GitHub Actions**. Do this before the next step or the deploy fails.
+
+**5.** Go to the **Actions** tab. A run called *Deploy to GitHub Pages* should be going.
+It runs the tests first and only deploys if they pass, so give it a few minutes.
+
+**6.** When it is green, the app is at:
+
+```
+https://YOUR-USERNAME.github.io/pairtrack/
+```
+
+Open that on the phone and add it to the home screen. Every later `git push` to `main`
+redeploys it automatically.
+
+### Cloudflare Pages + Cloudflare Access — also free, adds a login gate
+
+Worth it if you want a second lock in front of the whole site on top of the encryption.
+About 15 minutes. Point Cloudflare Pages at the same repo with build command
+`npm run build`, output directory `dist`, and environment variable `PAIRTRACK_BASE=/`.
+Then add an Access policy for the one email address that should reach it.
+
+The `_headers` file the build writes is picked up automatically, which also gets you
+`frame-ancestors` — see [docs/SECURITY.md](docs/SECURITY.md) §7.
 
 See [docs/DECISIONS.md](docs/DECISIONS.md) D10 for the full comparison.
 
