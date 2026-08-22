@@ -57,7 +57,8 @@ npm run verify
 ```
 
 That runs the whole gate: typecheck, lint, unit tests, production build, the
-external-origin check and the no-data scan. Run it before pushing.
+external-origin check, the working-tree no-data scan and the git-history scan. Run it
+before pushing.
 
 Individually:
 
