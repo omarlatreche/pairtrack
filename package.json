@@ -22,8 +22,9 @@
     "test:e2e": "playwright test",
     "check:data": "node scripts/no-data-scan.mjs",
     "check:origins": "node scripts/check-no-external-origins.mjs dist",
-    "verify": "npm run typecheck && npm run lint && npm run test && npm run build && npm run check:data",
-    "icons": "node scripts/make-icons.mjs"
+    "verify": "npm run typecheck && npm run lint && npm run test && npm run build && npm run check:data && npm run check:history",
+    "icons": "node scripts/make-icons.mjs",
+    "check:history": "node scripts/scan-history.mjs"
   },
   "dependencies": {
     "idb": "^8.0.3",

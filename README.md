@@ -68,7 +68,8 @@ Individually:
 | `npm run preview` | Serve the production build (this is what e2e runs against) |
 | `npm test` | Unit tests (Vitest) |
 | `npm run test:e2e` | End-to-end tests (Playwright, 390×844 phone viewport) |
-| `npm run check:data` | Scan the tree for job-pack data |
+| `npm run check:data` | Scan the working tree for job-pack data |
+| `npm run check:history` | Scan every commit ever made for a leak |
 | `npm run icons` | Regenerate the PWA icons |
 
 ## Installing it on a phone
@@ -156,8 +157,13 @@ The pack is personal data. Three independent guards, all of which must pass:
 2. `.githooks/pre-commit` refuses a commit containing one, or containing content that
    matches a job-reference pattern. It is installed automatically by `npm install`, so a
    fresh clone cannot forget it.
-3. A **required** CI job runs the same scanner over the whole tree *and* over the full git
-   history, on every push.
+3. A **required** CI job runs the same scanner over the whole tree on every push, plus a
+   second scanner (`scripts/scan-history.mjs`) over the full git history. The history one
+   deliberately checks less: a raw diff line carries no file context, so it looks only for
+   the two unambiguous signs of a leak — a spreadsheet or backup file committed at any
+   point, and a customer telephone number in any commit. Both were verified against a
+   repository where a `.csv` was committed and then deleted; the working tree looked clean
+   and the scan still failed, which is the whole point.
 
 The hook and CI share one scanner (`scripts/no-data-scan.mjs`) so they cannot drift apart.
 

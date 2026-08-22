@@ -28,15 +28,8 @@ jobs:
           node-version: 22
       - name: Scan the whole tree for job-pack data
         run: node scripts/no-data-scan.mjs
-      - name: Scan full git history for job references
-        run: |
-          if git log -p --all -- . \
-            | grep -nE '^\+.*\b[A-Z]{2,4}[0-9]{3,4}/[0-9]\b' \
-            | grep -vE '(BRIEF\.md|reference/|docs/|no-data-scan|pre-commit)' ; then
-            echo "::error::A job reference appears in git history. Treat the repo as leaked and rewrite history (git filter-repo)."
-            exit 1
-          fi
-          echo "No job references in history."
+      - name: Scan full git history
+        run: node scripts/scan-history.mjs
 
   verify:
     name: typecheck / lint / unit / build
