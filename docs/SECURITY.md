@@ -63,7 +63,8 @@ unmissably at setup and requires an explicit acknowledgement.
 | Cipher | AES-GCM, 256-bit | Authenticated: tampering fails loudly rather than decrypting to garbage. |
 | IV | **12 bytes, fresh random per encryption** | 96 bits is the size GCM is specified for. IV reuse under one key is the single catastrophic GCM mistake — `cipher.ts` generates the IV internally and has no parameter for accepting one. A unit test asserts uniqueness across 2,000 encryptions. |
 | Granularity | The whole job store as **one blob** | 442 jobs is well under 1MB. Per-record encryption would multiply the IV-handling surface and would leak the record count. |
-| Write policy | Debounced ~500ms, write-through | A state change is never left only in memory. |
+| Write policy | Debounced ~500ms, write-through | A state change is never left only in memory. A failed write is **reported**, not swallowed, and retried (D16). An import bypasses the debounce entirely. |
+| Re-keying | The blob and the verifier are written in **one transaction** | Split across two writes, an interruption leaves data that *no* passphrase can open (D13). |
 | Rollback | The last **5** encrypted snapshots kept in IndexedDB | Cheap insurance against a bad merge or a corrupted write. |
 
 Everything persisted is ciphertext. IndexedDB holds, in the clear, only: the salt, the
@@ -82,7 +83,10 @@ sessionStorage, the cache storage, or a file — including transiently during im
   text mid-job, and re-entering a 12-character passphrase in gloves every time would make
   him stop using the app — which is a worse security outcome than the 5-minute window.
 - On lock the key reference is dropped, the KDF worker is terminated, and decrypted
-  state is cleared from memory and from the DOM.
+  state is cleared from memory and from the DOM — **including the storage layer's
+  pending-write buffer**, which holds a fully decrypted vault and would otherwise
+  survive the lock. Every lock path flushes that buffer to disk first, so locking
+  cannot cost a change either (docs/DECISIONS.md D15).
 - A **verifier blob** — a known constant sealed with the derived key — turns a wrong
   passphrase into a clean *"Incorrect passphrase"* rather than a corrupt-looking store.
 - Unlock attempts are rate-limited with an **escalating delay after 5 failures**,
@@ -111,10 +115,21 @@ Three independent layers, because one is not enough:
 2. **`.githooks/pre-commit`** — installed via `git config core.hooksPath .githooks` from
    `postinstall`, so it cannot be forgotten on a fresh clone. Rejects the commit on a
    forbidden file type or on staged content matching a job-reference pattern.
-3. **CI job `no-data`** — required, runs the same scanner across the whole tree *and*
-   greps the full git history. It fails the build; it does not warn.
+3. **CI job `no-data`** — required. Runs the same scanner across the whole tree, plus
+   `scripts/scan-history.mjs` over every commit ever made. It fails the build; it does
+   not warn.
 
 The hook and CI call the same `scripts/no-data-scan.mjs`, so the two can never drift.
+The hook filters only *binaries* before handing files over — it used to strip `docs/`
+and `reference/` itself, which meant the two layers had different rules and the hook's
+were weaker.
+
+**The telephone-number pattern is `neverExempt`: no path exemption and no pragma waives
+it, and the scanner is not exempt from it either.** Path exemptions used to be applied
+before the pattern loop, so anything under `docs/` or `reference/` was waved through on
+that check as well — a worked example containing a real circuit number would have passed
+both the hook and CI. Exemptions are now named files, not directories, so adding a new
+file to `docs/` does not silently inherit one.
 
 **Declared exception (BRIEF §9.8):** `reference/*.png` are phone screenshots of the
 existing tool, and four real job numbers are legible in them. No telephone numbers, bar
