@@ -7,6 +7,7 @@
  */
 import type { GroupMode, Pack, SortDirection, SortField, ViewSpec } from '../../data/types';
 import { SORT_FIELD_LABELS } from '../../data/view';
+import { headerForRole } from '../../import/columns';
 import { Sheet } from './Sheet';
 import { TickIcon } from './Icons';
 
@@ -34,9 +35,19 @@ const GROUP_LABELS: Record<GroupMode, string> = {
 };
 
 export function SortSheet({ view, pack, onChange, onClose }: SortSheetProps) {
-  // Constant columns are worth zero screen space and zero sort options.
+  // Two exclusions:
+  //   - a constant column is worth zero screen space and zero sort options
+  //   - a column already covered by a dedicated sort field would appear twice,
+  //     differing only in capitalisation ("Job number" and "Job Number"), which
+  //     is worse than useless: two entries that do the same thing.
+  const dedicated = new Set(
+    (['seq', 'jobNumber', 'barPair'] as const)
+      .map((role) => headerForRole(pack.columnMapping, role))
+      .filter((header): header is string => header !== null),
+  );
+
   const sortableSourceColumns = pack.columns.filter(
-    (column) => !(column in pack.constantColumns),
+    (column) => !(column in pack.constantColumns) && !dedicated.has(column),
   );
 
   function setField(field: SortField) {

@@ -26,13 +26,14 @@ const HEADERS = [
 const BLOCKS = ['A', 'B', 'D', 'E', 'F', 'G', 'H', 'J', 'K', 'L', 'N', 'P', 'R', 'S', 'T', 'U', 'W'];
 const SHELVES = ['110', '111', '112', '9', '8'];
 
-/**
- * @param {string} outPath
- * @param {{ rows?: number, phantomColumns?: boolean }} [options]
- */
-export function writeSyntheticPack(outPath, options = {}) {
+export interface PackOptions {
+  readonly rows?: number;
+  readonly phantomColumns?: boolean;
+}
+
+export function writeSyntheticPack(outPath: string, options: PackOptions = {}) {
   const { rows: total = 442, phantomColumns = true } = options;
-  const rows = [];
+  const rows: string[][] = [];
 
   for (let i = 1; i <= total; i += 1) {
     const isIntl = i > total - 26;
@@ -90,7 +91,7 @@ export function writeSyntheticPack(outPath, options = {}) {
 }
 
 /** The job number the generator produces for a given row, for assertions. */
-export function jobNumberForRow(i) {
+export function jobNumberForRow(i: number): string {
   const prefix = i % 5 === 0 ? 'QQB' : i % 17 === 0 ? 'QQC' : 'QQA';
   return `${prefix}${String(100 + (i % 900)).padStart(3, '0')}/3`;
 }

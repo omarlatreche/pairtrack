@@ -23,6 +23,7 @@ import {
 } from '../../import/merge';
 import { ImportError, parseWorkbook, type ParsedSheet } from '../../import/parse';
 import { commit, getState, setState } from '../../state/store';
+import { flushSave } from '../../data/repository';
 import { JOB_TYPE_LABELS } from '../../data/view';
 import { BackIcon, ImportIcon, WarnIcon } from '../components/Icons';
 import type { Job } from '../../data/types';
@@ -108,7 +109,7 @@ export function ImportScreen() {
     setStage('preview');
   }
 
-  function confirm() {
+  async function confirm() {
     if (sheet === null || built === null) return;
 
     const now = new Date().toISOString();
@@ -145,6 +146,26 @@ export function ImportScreen() {
       };
       return { ...vault, activePackId: fresh.id, packs: [...vault.packs, fresh] };
     });
+
+    // Write it through NOW rather than leaving it in the 500ms debounce window.
+    //
+    // The debounce is right for ticking jobs — that is a stream of small
+    // changes. An import is one big, rare change that is expensive to redo, and
+    // a crash or a force-quit in that half-second would lose the whole pack.
+    // Saying "Imported" before it is actually on disk would also be a lie.
+    setBusy(true);
+    try {
+      await flushSave();
+    } catch (caught) {
+      setError(
+        caught instanceof Error
+          ? `Imported, but could not save: ${caught.message}`
+          : 'Imported, but could not save to this device.',
+      );
+      setBusy(false);
+      return;
+    }
+    setBusy(false);
 
     setSummary(
       `${built.jobs.length} jobs imported. ${Object.entries(built.types)
@@ -287,8 +308,13 @@ export function ImportScreen() {
             </div>
           )}
 
-          <button type="button" class="button button--primary" onClick={confirm}>
-            Import {built.jobs.length} jobs
+          <button
+            type="button"
+            class="button button--primary"
+            disabled={busy}
+            onClick={() => void confirm()}
+          >
+            {busy ? 'Saving…' : `Import ${built.jobs.length} jobs`}
           </button>
           <button type="button" class="button" onClick={() => setStage('map')}>
             Back to the columns

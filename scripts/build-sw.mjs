@@ -72,6 +72,13 @@ self.addEventListener('activate', (event) => {
   );
 });
 
+function staleAsset() {
+  return new Response('Not part of this version of the app. Reload to update.', {
+    status: 504,
+    headers: { 'Content-Type': 'text/plain' },
+  });
+}
+
 self.addEventListener('fetch', (event) => {
   const request = event.request;
 
@@ -83,23 +90,47 @@ self.addEventListener('fetch', (event) => {
   // one appears, let it fail on its own rather than caching it.
   if (url.origin !== self.location.origin) return;
 
+  // ignoreVary is essential, not a nicety.
+  //
+  // Many static hosts answer with "Vary: Origin" (vite preview and Cloudflare
+  // both do). Cache.match honours Vary, so a response precached by a plain
+  // fetch -- which sends no Origin header -- will NOT match the browser's own
+  // request for a module script or stylesheet, which is made in CORS mode and
+  // DOES send one. The entry sits in the cache and is never found.
+  //
+  // Online that is invisible, because the miss falls through to the network.
+  // Offline it means the app precached perfectly and still refuses to start.
+  // The precache is keyed by URL and is entirely ours, so Vary is meaningless
+  // for it: ignore it.
+  const MATCH = { ignoreVary: true };
+
   event.respondWith(
-    caches.match(request).then((cached) => {
+    caches.match(request, MATCH).then((cached) => {
       if (cached) return cached;
 
       // A navigation to any in-app path resolves to the cached shell, so a
       // deep link or a refresh works offline.
       if (request.mode === 'navigate') {
-        return caches.match('${BASE}').then((shell) => shell || fetch(request));
+        return caches.match('${BASE}', MATCH).then((shell) => shell || fetch(request));
       }
 
-      return fetch(request).catch(
-        () =>
-          new Response('Offline and not cached.', {
-            status: 504,
-            headers: { 'Content-Type': 'text/plain' },
-          }),
-      );
+      // A same-origin asset that missed the cache: try the network, but do not
+      // trust an HTML answer.
+      //
+      // A static host answers an unknown path with index.html. Handing that
+      // back for a script request makes the browser reject it with a MIME
+      // error that reads like a broken app rather than what it is -- a stale
+      // worker asking for a file this version no longer has. Catching it here
+      // turns a confusing failure into an accurate one.
+      return fetch(request)
+        .then((response) => {
+          const type = response.headers.get('content-type') || '';
+          if (response.ok && type.includes('text/html')) {
+            return staleAsset();
+          }
+          return response;
+        })
+        .catch(() => staleAsset());
     }),
   );
 });

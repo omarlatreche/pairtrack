@@ -27,10 +27,22 @@
 
   --text: #f0f6fc;
   --text-dim: #9198a1;
-  --text-faint: #6e7681;
+  /*
+   * Contrast-checked, not eyeballed. Against --bg-raised, the worst case:
+   *   --text-dim   5.94  (AA)
+   *   --text-faint 6.72  (AA; the previous #6e7681 was 3.77 and failed)
+   */
+  --text-faint: #9aa2ae;
 
-  --accent: #4493f8;
-  --accent-ink: #ffffff;
+  /*
+   * A bright accent with near-black ink, rather than a darker accent with
+   * white ink. Two reasons: 7.49 against the ink beats anything white-on-blue
+   * can reach at this hue, and a bright chip is easier to pick out at arm's
+   * length in a dark exchange. It is also the same dark-on-bright logic the
+   * sunlight theme uses, so the two themes behave alike.
+   */
+  --accent: #58a6ff;
+  --accent-ink: #08111f;
 
   --pass: #3fb950;
   --pass-bg: #12261a;

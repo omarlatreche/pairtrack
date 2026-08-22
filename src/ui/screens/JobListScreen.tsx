@@ -64,6 +64,14 @@ export function JobListScreen({ state }: { state: AppState }) {
     return countJobs(pack.jobs, view.search);
   }, [pack, view?.search]);
 
+  // Changing the sort or the grouping invalidates his place in the list: the
+  // rows under the current scroll offset are now a different set of jobs. Going
+  // back to the top is the only honest response — anything else drops him
+  // somewhere arbitrary, which is the opposite of "never hunt for your place".
+  useEffect(() => {
+    scroller.current?.scrollTo({ top: 0 });
+  }, [view?.sortField, view?.sortDirection, view?.group]);
+
   // Auto-advance: bring the next job in the current sort order to the top so he
   // never hunts for his place (BRIEF §7.3).
   useEffect(() => {
