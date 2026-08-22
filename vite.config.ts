@@ -1,6 +1,15 @@
 import { defineConfig } from 'vite';
 import preact from '@preact/preset-vite';
 
+/** Tunnel providers allowed to reach a locally-started dev/preview server. */
+const TUNNEL_HOSTS = [
+  '.trycloudflare.com',
+  '.ngrok-free.app',
+  '.ngrok.io',
+  '.loca.lt',
+  '.tunnelmole.net',
+];
+
 /**
  * Vite config.
  *
@@ -43,13 +52,32 @@ export default defineConfig(() => {
     worker: {
       format: 'es',
     },
+    /*
+     * Tunnel hostnames, for testing on a real phone.
+     *
+     * The app needs a secure context — WebCrypto does not exist without one —
+     * so `http://192.168.x.x:5173` from a phone will not run it. The practical
+     * way round that without deploying is a throwaway tunnel:
+     *
+     *     npx cloudflared tunnel --url http://localhost:4173
+     *
+     * Vite checks the Host header and rejects anything not listed here, so the
+     * tunnel would otherwise return "Blocked request. This host is not
+     * allowed." A leading dot matches subdomains.
+     *
+     * Scope of this: it only affects a server the developer starts on their own
+     * machine, deliberately. It is not part of the deployed app, and it names
+     * specific tunnel providers rather than allowing any host.
+     */
     server: {
       port: 5173,
       host: true,
+      allowedHosts: TUNNEL_HOSTS,
     },
     preview: {
       port: 4173,
       host: true,
+      allowedHosts: TUNNEL_HOSTS,
     },
   };
 });

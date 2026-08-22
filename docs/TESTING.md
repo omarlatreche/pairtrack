@@ -60,20 +60,31 @@ You need https, which means putting it somewhere real. Either:
 under **Settings → Pages → Source → GitHub Actions**, and open the published URL on the
 phone. See the README.
 
-**Or tunnel it temporarily** — no account needed:
+**Or tunnel it temporarily** — no account needed. **Two terminals, in this order.**
+
+First:
 
 ```bash
 npm run preview -- --port 4173
 ```
 
-then, in a second terminal:
+Leave that running. Then, in a second terminal:
 
 ```bash
 npx cloudflared tunnel --url http://localhost:4173
 ```
 
-It prints an `https://…trycloudflare.com` URL. Open that on the phone. The tunnel dies
-when you close the terminal, which is what you want for a test.
+It prints an `https://…trycloudflare.com` URL. Open that on the phone.
+
+Start the tunnel *before* the server and it points at nothing — Cloudflare answers with a
+502 and it looks like the app is broken. `vite.config.ts` already lists the tunnel
+providers under `allowedHosts`; without that Vite rejects the tunnel's Host header with
+*"Blocked request. This host is not allowed."*
+
+Both terminals have to stay open. The tunnel dies when you close it, which is what you
+want for a test — but note the URL is **different every time**. A phone that installed
+from the old URL treats a new one as a separate app with its own empty vault, so for
+testing across several days, deploy it properly and get a stable URL instead.
 
 Once it loads: **iPhone** → Share → *Add to Home Screen*. **Android** → menu →
 *Install app*. Then open it from the icon, not the browser.
