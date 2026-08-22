@@ -241,7 +241,7 @@ Three, and each has to justify itself:
 |---|---|
 | `preact` | The UI runtime, ~4KB. |
 | `idb` | A thin, readable Promise wrapper over IndexedDB, ~1KB. It only ever sees ciphertext. |
-| `xlsx` (SheetJS) | Reads and writes the spreadsheet. Bundled locally, never from a CDN, and dynamically imported so it is absent from the main chunk. |
+| `xlsx` (SheetJS) | Reads and writes the spreadsheet. Pinned to the patched 0.20.3 from SheetJS's own distribution — the npm package is stale at 0.18.5 and has open CVEs with no fixed release there. Bundled into `dist/` like anything else; nothing is fetched at runtime. See [docs/SECURITY.md](docs/SECURITY.md) §7. |
 
 No state library, no CSS framework, no date library, no icon package, no crypto library.
 Every one of those would be code that cannot be audited by whoever inherits this.

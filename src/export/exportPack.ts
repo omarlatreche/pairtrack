@@ -142,7 +142,9 @@ export function buildCsv(pack: Pack, jobs: Job[], failReasons: FailReason[]): Bl
  * into WhatsApp or an email to the office in one step. Falls back to a
  * download, which is what a desktop browser wants.
  */
-export async function deliverFile(blob: Blob, fileName: string): Promise<'shared' | 'downloaded'> {
+export type DeliveryResult = 'shared' | 'downloaded' | 'cancelled';
+
+export async function deliverFile(blob: Blob, fileName: string): Promise<DeliveryResult> {
   const file = new File([blob], fileName, { type: blob.type });
 
   if (
@@ -154,9 +156,12 @@ export async function deliverFile(blob: Blob, fileName: string): Promise<'shared
       await navigator.share({ files: [file], title: fileName });
       return 'shared';
     } catch (error) {
-      // A cancelled share is not a failure; fall through to the download so he
-      // is never left with nothing.
-      if (error instanceof DOMException && error.name === 'AbortError') return 'shared';
+      // Cancelling the share sheet is not a failure, but it is emphatically not
+      // a success either — no file exists afterwards. Reporting it as 'shared'
+      // made the app mark a backup as taken when none had been, which is the
+      // worst possible thing to be wrong about: he would find out on the day he
+      // needed it. Say cancelled and let the caller decide.
+      if (error instanceof DOMException && error.name === 'AbortError') return 'cancelled';
     }
   }
 

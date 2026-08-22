@@ -6,9 +6,9 @@
  * because the failure it describes is unrecoverable by anyone including us.
  */
 import { useState } from 'preact/hooks';
-import { createVault } from '../../crypto/vault';
+import { createVault, requireKey } from '../../crypto/vault';
 import { assessPassphrase, MIN_PASSPHRASE_LENGTH } from '../../crypto/passphrase';
-import { emptyVault, saveMeta, saveVault } from '../../data/repository';
+import { emptyVault, rekeyVault } from '../../data/repository';
 import { WarnIcon } from '../components/Icons';
 
 interface FirstRunScreenProps {
@@ -37,11 +37,15 @@ export function FirstRunScreen({ onReady }: FirstRunScreenProps) {
 
     try {
       const meta = await createVault(passphrase);
-      await saveMeta(meta);
 
       const vault = emptyVault();
       vault.settings.engineerName = name.trim();
-      await saveVault(vault);
+
+      // Both writes in one transaction. Written separately, an interruption in
+      // between leaves metadata with no vault — and hasVault() only checks the
+      // metadata, so the next launch shows a lock screen for an installation
+      // that can never open.
+      await rekeyVault(vault, requireKey(), meta);
 
       setPassphrase('');
       setConfirmation('');

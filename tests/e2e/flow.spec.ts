@@ -157,7 +157,14 @@ test('setup, import, mark, lock, unlock, persistence, export', async ({ page }) 
   await expect(page.locator('.card')).toHaveCount(1, { timeout: 5000 });
   await expect(page.locator('.card__number').first()).toHaveText(firstJobNumber);
   await search.fill('');
-  await expect(page.locator('.card').first()).toBeVisible();
+  // Wait for the list to actually come back, not merely for a card to exist.
+  // Search is debounced 120ms, so "a card is visible" is still true while the
+  // single filtered result is on screen — and the sort assertions below then
+  // run against a list of one.
+  await expect(page.getByRole('button', { name: /^All/ })).toContainText(String(TOTAL_JOBS));
+  await expect
+    .poll(async () => page.locator('.card').count(), { timeout: 5000 })
+    .toBeGreaterThan(1);
 
   // --- Sort survives a change and a relaunch -------------------------------
   await page.getByRole('button', { name: 'Sort', exact: true }).first().click();

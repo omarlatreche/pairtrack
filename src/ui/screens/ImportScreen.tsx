@@ -43,6 +43,7 @@ const ROLE_OPTIONS: ColumnRole[] = [
 ];
 
 export function ImportScreen() {
+  const packs = getState().vault?.packs ?? [];
   const [stage, setStage] = useState<Stage>('pick');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -52,7 +53,8 @@ export function ImportScreen() {
   const [mapping, setMapping] = useState<Record<string, ColumnRole | null>>({});
   const [built, setBuilt] = useState<{ jobs: Job[]; types: Record<string, number> } | null>(null);
   const [preview, setPreview] = useState<MergePreview | null>(null);
-  const [target, setTarget] = useState<Pack | null>(null);
+  /** '' means "a new pack"; otherwise the id of the pack to update. */
+  const [targetId, setTargetId] = useState<string>('');
   const [summary, setSummary] = useState('');
 
   async function onFile(event: Event) {
@@ -104,9 +106,26 @@ export function ImportScreen() {
     const existingPack = findMergeTarget(getState().vault?.packs ?? [], packName);
 
     setBuilt({ jobs: result.jobs, types: result.typeCounts });
-    setTarget(existingPack);
+    setTargetId(existingPack?.id ?? '');
     setPreview(previewMerge(existingPack?.jobs ?? [], result.jobs));
     setStage('preview');
+  }
+
+  /**
+   * Which pack this import lands in — his choice, not a guess from the filename.
+   *
+   * Matching on the filename stem alone gets it wrong in both directions: the
+   * office re-sending a corrected file as "… (1).xlsx" would start a new pack
+   * and strand every tick, while a genuinely new week's pack that happened to
+   * keep the same name would merge into the old one. Neither is silent — the
+   * preview shows the numbers — but until this existed there was no way to
+   * redirect it, and his only remedy was renaming a file on a phone.
+   */
+  function retarget(id: string) {
+    if (built === null) return;
+    setTargetId(id);
+    const pack = packs.find((candidate) => candidate.id === id) ?? null;
+    setPreview(previewMerge(pack?.jobs ?? [], built.jobs));
   }
 
   async function confirm() {
@@ -115,6 +134,7 @@ export function ImportScreen() {
     const now = new Date().toISOString();
     const packName = packNameFromFile(fileName);
     const constantColumns = detectConstantColumns(sheet.rows, sheet.headers);
+    const target = packs.find((candidate) => candidate.id === targetId) ?? null;
 
     commit((vault) => {
       if (target !== null) {
@@ -278,8 +298,33 @@ export function ImportScreen() {
         <>
           <h2 class="section__title">Before anything changes</h2>
 
+          {packs.length > 0 && (
+            <label class="field">
+              <span class="field__label">Where should this go?</span>
+              <select
+                class="select"
+                value={targetId}
+                onChange={(event) => retarget((event.target as HTMLSelectElement).value)}
+              >
+                <option value="">Start a new pack</option>
+                {packs.map((pack) => (
+                  <option value={pack.id} key={pack.id}>
+                    Update “{pack.name}” ({pack.jobs.length} jobs)
+                  </option>
+                ))}
+              </select>
+              <p class="field__hint">
+                Updating keeps every tick on the jobs that match by job number.
+              </p>
+            </label>
+          )}
+
           <div class="callout callout--info">
-            <strong>{target === null ? 'New pack' : `Updating “${target.name}”`}</strong>
+            <strong>
+              {targetId === ''
+                ? 'New pack'
+                : `Updating “${packs.find((p) => p.id === targetId)?.name ?? ''}”`}
+            </strong>
             <p>{describeMerge(preview)}</p>
           </div>
 

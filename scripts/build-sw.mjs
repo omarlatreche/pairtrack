@@ -50,7 +50,8 @@ const sw = `/*
  * underneath him mid-job.
  */
 
-const CACHE = 'pairtrack-${version}';
+const CACHE_PREFIX = 'pairtrack-';
+const CACHE = CACHE_PREFIX + '${version}';
 
 const PRECACHE = ${JSON.stringify(urls, null, 2)};
 
@@ -66,7 +67,15 @@ self.addEventListener('activate', (event) => {
     caches
       .keys()
       .then((keys) =>
-        Promise.all(keys.filter((key) => key !== CACHE).map((key) => caches.delete(key))),
+        Promise.all(
+          keys
+            // Only OUR old caches. Cache Storage is origin-wide, and on
+            // username.github.io every project site of the same user shares
+            // that origin — deleting everything that is not ours would wipe
+            // the offline cache of unrelated apps.
+            .filter((key) => key.startsWith(CACHE_PREFIX) && key !== CACHE)
+            .map((key) => caches.delete(key)),
+        ),
       )
       .then(() => self.clients.claim()),
   );

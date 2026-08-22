@@ -12,7 +12,7 @@
  */
 import { openDB, type DBSchema, type IDBPDatabase } from 'idb';
 import { decryptJson, encryptJson, type Sealed } from '../crypto/cipher';
-import { onLockStateChange, requireKey } from '../crypto/vault';
+import { adoptKey, onLockStateChange, requireKey } from '../crypto/vault';
 import type { VaultMeta } from '../crypto/vault';
 import { SNAPSHOT_RING_SIZE } from '../crypto/params';
 import { DEFAULT_FAIL_REASONS } from './failReasons';
@@ -117,7 +117,7 @@ export async function saveMeta(meta: VaultMeta): Promise<void> {
  * Both stores live in the same database, so one readwrite transaction across
  * the two makes it atomic: either the re-key happened or it did not.
  */
-export async function saveVaultAndMeta(
+async function writeVaultAndMeta(
   vault: Vault,
   key: CryptoKey,
   meta: VaultMeta,
@@ -146,6 +146,35 @@ export async function saveVaultAndMeta(
   // The rollback ring is best-effort and deliberately outside the atomic part:
   // losing a snapshot is survivable, losing the re-key is not.
   if (previous) await pushSnapshot(database, previous);
+}
+
+/**
+ * Install a brand-new key: write the vault and the matching verifier, then
+ * adopt the key — all as one indivisible step.
+ *
+ * Used for the first run and for a passphrase change, and it must be BOTH
+ * atomic and exclusive.
+ *
+ * Atomic, or a crash between the two writes leaves ciphertext under the new key
+ * beside a verifier for the old passphrase — and then neither passphrase opens
+ * it, with no reset and no way for the app to explain why.
+ *
+ * Exclusive, because the transaction alone is not enough. Re-keying awaits
+ * 600,000 PBKDF2 iterations and then a WebCrypto encrypt and an IndexedDB
+ * transaction. The UI stays live across every one of those awaits, so an
+ * ordinary debounced save can fire in the middle, call `requireKey()` while
+ * that is *still the old key*, and land its old-key blob after the new verifier
+ * has been written. Same unopenable result, reached by a different route.
+ *
+ * Running it through the same queue as every other write, with `adoptKey`
+ * inside the critical section, closes that: any save that queues during the
+ * re-key runs afterwards and picks up the new key.
+ */
+export async function rekeyVault(vault: Vault, key: CryptoKey, meta: VaultMeta): Promise<void> {
+  await enqueueWrite(async () => {
+    await writeVaultAndMeta(vault, key, meta);
+    adoptKey(key);
+  });
 }
 
 export async function hasVault(): Promise<boolean> {
@@ -255,7 +284,29 @@ const SAVE_RETRY_MS = 3000;
 
 let saveTimer: ReturnType<typeof setTimeout> | null = null;
 let pending: Vault | null = null;
-let inFlight: Promise<void> = Promise.resolve();
+
+/**
+ * The one write queue. Every persistence path goes through it.
+ *
+ * Ordering is the point, not throughput. A re-key and an ordinary save must
+ * never interleave: both read the current key at the moment they run, so a save
+ * that starts mid-re-key would seal with the old key and land after the new
+ * verifier. Serialising them means whichever runs second sees the settled key.
+ *
+ * A failed write must not poison the queue for everything after it, so the tail
+ * is reset to a resolved promise either way; the caller still sees its own
+ * rejection.
+ */
+let writeQueue: Promise<unknown> = Promise.resolve();
+
+function enqueueWrite<T>(work: () => Promise<T>): Promise<T> {
+  const run = writeQueue.then(work, work);
+  writeQueue = run.then(
+    () => undefined,
+    () => undefined,
+  );
+  return run;
+}
 
 /**
  * Queue a save. Coalesces rapid ticks — marking 20 jobs in a minute is one
@@ -287,10 +338,8 @@ export async function flushSave(): Promise<void> {
   pending = null;
   if (vault === null) return;
 
-  inFlight = inFlight.then(() => saveVault(vault));
-
   try {
-    await inFlight;
+    await enqueueWrite(() => saveVault(vault));
   } catch (error) {
     // Put it back so it is retried — but ONLY if nothing newer arrived while
     // this write was in flight. Restoring unconditionally would discard a tick
@@ -309,8 +358,6 @@ export async function flushSave(): Promise<void> {
       }
     }
 
-    // A rejected promise poisons every later .then() in the chain.
-    inFlight = Promise.resolve();
     throw error;
   }
 }

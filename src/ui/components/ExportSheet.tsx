@@ -53,6 +53,10 @@ export function ExportSheet({ pack, onClose }: ExportSheetProps) {
           : buildCsv(pack, pack.jobs, failReasons);
       const name = exportFileName(pack, kind);
       const how = await deliverFile(blob, name);
+      if (how === 'cancelled') {
+        setError('Export cancelled — nothing was saved.');
+        return;
+      }
       setDone(how === 'shared' ? `Shared ${name}` : `Saved ${name}`);
       setConfirmPlaintext(null);
     });
@@ -78,6 +82,14 @@ export function ExportSheet({ pack, onClose }: ExportSheetProps) {
       const blob = await createBackup(vault, passphrase);
       const name = backupFileName(pack.name);
       const how = await deliverFile(blob, name);
+
+      if (how === 'cancelled') {
+        // No file was produced. Marking the backup as taken here would tell him
+        // he is covered when he is not.
+        setError('Backup cancelled — nothing was saved. Your last backup is unchanged.');
+        return;
+      }
+
       updateSettings((current) => ({
         ...current,
         changesSinceBackup: 0,

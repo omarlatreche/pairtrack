@@ -177,7 +177,23 @@ build** if any external origin appears in a script, style, font or fetch referen
 |---|---|---|
 | `preact` | The UI runtime. ~4KB. | Full app compromise — but it never sees the key, and CSP blocks exfiltration. |
 | `idb` | A thin, readable Promise wrapper over IndexedDB. ~1KB. | Only ever handed ciphertext. |
-| `xlsx` (SheetJS) | Reads the `Job_pack` Excel table and writes the export. Bundled locally, never from a CDN. | Sees plaintext job data during import. It is the highest-value dependency in the project — hence pinned, lockfile-committed and dynamically imported so it is absent from the main chunk. |
+| `xlsx` (SheetJS) | Reads the `Job_pack` Excel table and writes the export. | Sees plaintext job data during import — the highest-value dependency in the project. Pinned, lockfile-committed, and dynamically imported so it is absent from the main chunk. |
+
+**A note on where SheetJS comes from.** `package.json` pins
+`https://cdn.sheetjs.com/xlsx-0.20.3/xlsx-0.20.3.tgz` rather than the npm registry. That
+looks like the opposite of what §7 asks for, so it is worth being explicit:
+
+- The npm `xlsx` package is stale at 0.18.5 and carries CVE-2023-30533 (prototype
+  pollution) and CVE-2024-22363 (ReDoS), both triggerable by reading a crafted workbook.
+  **There is no fixed release on npm** — SheetJS publishes patched versions only from
+  their own distribution.
+- This is a **build-time** fetch, resolved once and recorded in the committed lockfile
+  with an integrity hash. Nothing is fetched at runtime; the library is bundled into
+  `dist/` like any other dependency, and `scripts/check-no-external-origins.mjs` still
+  fails the build if any external origin reaches the output.
+- The trade-off is that CI needs network access to `cdn.sheetjs.com` at install time. If
+  that host is unreachable the build fails at `npm ci` — which is the right way round,
+  because the alternative is silently shipping the vulnerable parser.
 
 Everything else is a devDependency and never reaches the device. The lockfile is
 committed; Dependabot is enabled.

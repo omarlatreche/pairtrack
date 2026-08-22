@@ -355,10 +355,10 @@ describe('migration', () => {
  * Regressions from review. The first is the worst failure the app can have:
  * a re-key that half-lands leaves data no passphrase can open.
  */
-describe('re-keying is atomic', () => {
+describe('re-keying is atomic and exclusive', () => {
   it('the blob and the verifier are always for the same passphrase', async () => {
-    const { rederiveForNewPassphrase, adoptKey } = await import('../../src/crypto/vault');
-    const { saveVaultAndMeta } = await import('../../src/data/repository');
+    const { rederiveForNewPassphrase } = await import('../../src/crypto/vault');
+    const { rekeyVault } = await import('../../src/data/repository');
 
     const pack = makePack(10);
     const vault = vaultWith(pack);
@@ -368,8 +368,7 @@ describe('re-keying is atomic', () => {
 
     const NEW_PASSPHRASE = 'a different long passphrase';
     const { meta, key } = await rederiveForNewPassphrase(NEW_PASSPHRASE);
-    await saveVaultAndMeta(vault, key, meta);
-    adoptKey(key);
+    await rekeyVault(vault, key, meta);
 
     // The stored meta must open the stored blob. If these two ever disagree,
     // neither the old nor the new passphrase works and there is no recovery.
@@ -383,6 +382,39 @@ describe('re-keying is atomic', () => {
     expect(loaded?.packs[0]?.jobs).toHaveLength(10);
   }, 90_000);
 
+  it('a save queued during a re-key does not land under the old key', async () => {
+    // The transaction alone did not fix this. Re-keying awaits 600k PBKDF2
+    // iterations and then IndexedDB with the UI live, so an ordinary debounced
+    // save could seal with the still-current OLD key and land AFTER the new
+    // verifier — leaving a blob neither passphrase opens.
+    const { rederiveForNewPassphrase } = await import('../../src/crypto/vault');
+    const { rekeyVault } = await import('../../src/data/repository');
+
+    const firstMeta = await loadMetaOrCreate();
+    await saveVault(vaultWith(makePack(10)));
+    await saveMeta(firstMeta);
+
+    const NEW_PASSPHRASE = 'yet another long passphrase';
+    const { meta, key } = await rederiveForNewPassphrase(NEW_PASSPHRASE);
+
+    // Fire a save into the middle of the re-key, exactly as a tick would.
+    const rekeying = rekeyVault(vaultWith(makePack(12)), key, meta);
+    queueSave(vaultWith(makePack(14)));
+    const flushing = flushSave();
+
+    await Promise.all([rekeying, flushing]);
+
+    // Whatever order they ran in, the stored blob must open with the NEW
+    // passphrase — the queue guarantees the save saw the settled key.
+    lock();
+    __resetThrottleForTests();
+    const stored = await loadMeta();
+    await unlock(NEW_PASSPHRASE, stored!);
+
+    const loaded = await loadVault();
+    expect(loaded?.packs[0]?.jobs.length).toBeGreaterThan(0);
+  }, 120_000);
+
   async function loadMetaOrCreate() {
     const existing = await loadMeta();
     if (existing !== null) return existing;
@@ -393,19 +425,44 @@ describe('re-keying is atomic', () => {
 });
 
 describe('flushSave reports failure instead of swallowing it', () => {
-  it('rejects when the write fails, so callers are not told a comforting lie', async () => {
-    await saveVault(vaultWith(makePack(5)));
+  it('rejects when the write really fails, so callers are not told a comforting lie', async () => {
+    // A genuinely failing write, not a no-op. The database is made unopenable
+    // underneath the repository, which is the same shape as a quota error or
+    // eviction: flushSave must surface it rather than resolving as though the
+    // data were safely on disk.
+    const workingIndexedDB = globalThis.indexedDB;
+    __resetDbForTests();
+    globalThis.indexedDB = {
+      open() {
+        const request: Record<string, unknown> = { error: new Error('storage unavailable') };
+        queueMicrotask(() => {
+          (request.onerror as ((e: unknown) => void) | undefined)?.({ target: request });
+        });
+        return request;
+      },
+      deleteDatabase: workingIndexedDB.deleteDatabase.bind(workingIndexedDB),
+    } as unknown as IDBFactory;
 
-    // Lock the vault: the queued write will then fail on requireKey(). This is
-    // the same shape as a quota error — the point is that flushSave surfaces
-    // it rather than resolving as though the data were safely on disk.
     queueSave(vaultWith(makePack(5)));
-    lock();
 
-    // The lock backstop drops the pending plaintext, so there is nothing left
-    // to write and the flush is a no-op rather than a false success.
+    await expect(flushSave()).rejects.toBeDefined();
+
+    // And the change is kept for a retry rather than dropped on the floor.
+    expect(hasPendingSave()).toBe(true);
+
+    globalThis.indexedDB = workingIndexedDB;
+    __resetDbForTests();
+  });
+
+  it('a later failure does not poison the queue for the next write', async () => {
+    // The queue tail is reset on failure, so one bad write must not make every
+    // subsequent save reject for the life of the session.
+    await saveVault(vaultWith(makePack(3)));
+    queueSave(vaultWith(makePack(4)));
     await expect(flushSave()).resolves.toBeUndefined();
-    expect(hasPendingSave()).toBe(false);
+
+    const loaded = await loadVault();
+    expect(loaded?.packs[0]?.jobs).toHaveLength(4);
   });
 
   it('drops pending plaintext the moment the vault locks', async () => {

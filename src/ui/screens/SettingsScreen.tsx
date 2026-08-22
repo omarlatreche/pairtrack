@@ -7,10 +7,10 @@
 import { useState } from 'preact/hooks';
 import { MAX_IDLE_MINUTES, MIN_IDLE_MINUTES } from '../../crypto/autolock';
 import { assessPassphrase, MIN_PASSPHRASE_LENGTH } from '../../crypto/passphrase';
-import { adoptKey, lock, rederiveForNewPassphrase } from '../../crypto/vault';
+import { lock, rederiveForNewPassphrase } from '../../crypto/vault';
 import { slugifyReason } from '../../data/failReasons';
-import { flushSave, migrate, saveVaultAndMeta, wipeEverything } from '../../data/repository';
-import { parseBackup, restoreBackup } from '../../export/backup';
+import { flushSave, rekeyVault, wipeEverything } from '../../data/repository';
+import { restoreFromBackupText } from '../../data/restore';
 import { commit, getState, setState, updateSettings, type AppState } from '../../state/store';
 import { formatStamp } from '../components/format';
 import { BackIcon, LockIcon, WarnIcon } from '../components/Icons';
@@ -55,8 +55,13 @@ export function SettingsScreen({ state }: { state: AppState }) {
       // written before the key changes underneath it.
       await flushSave();
 
-      await saveVaultAndMeta(current, key, meta);
-      adoptKey(key);
+      // rekeyVault writes the blob and the verifier in one transaction AND
+      // adopts the key inside the same slot of the write queue. Doing those as
+      // separate steps left a window: re-keying awaits 600k PBKDF2 iterations
+      // and then IndexedDB, the UI stays live throughout, and a debounced save
+      // firing in the middle would seal with the still-current OLD key and land
+      // after the new verifier. Neither passphrase would open the result.
+      await rekeyVault(current, key, meta);
 
       setNewPass('');
       setNewPassConfirm('');
@@ -90,19 +95,18 @@ export function SettingsScreen({ state }: { state: AppState }) {
     setBusy('Restoring backup');
     setError(null);
     try {
-      const parsed = parseBackup(restoreText);
-      const restored = await restoreBackup(parsed, restorePass);
-
-      // Through migrate() first: a backup from an older build can be missing
-      // fields the UI renders unconditionally, and a crash on the next render
-      // is a poor reward for restoring a backup. Then write it through under
-      // the CURRENT device key, so it opens with the passphrase he uses here.
-      commit(() => migrate(restored));
-      await flushSave();
+      // Same path the lock screen uses: decrypt, migrate, then write the vault
+      // and a fresh verifier together. Afterwards the backup's passphrase is
+      // the one that unlocks this device.
+      const restored = await restoreFromBackupText(restoreText, restorePass);
+      commit(() => restored);
 
       setRestoreText(null);
       setRestorePass('');
-      setMessage(`Restored ${restored.packs.length} pack(s) from the backup.`);
+      setMessage(
+        `Restored ${restored.packs.length} pack(s). This device now unlocks with the ` +
+          `passphrase that encrypted that backup.`,
+      );
       setState({ screen: { name: 'list' } });
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : 'Could not restore that backup.');
