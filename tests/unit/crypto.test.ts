@@ -156,7 +156,7 @@ describe('AES-GCM cipher', () => {
     const key = await fastKey();
     const sealed = await encryptBytes(key, utf8Encode('untampered'));
     const tampered = { ...sealed, ciphertext: Uint8Array.from(sealed.ciphertext) };
-    tampered.ciphertext[0] ^= 0xff;
+    tampered.ciphertext.set([(tampered.ciphertext[0] as number) ^ 0xff], 0);
     await expect(decryptBytes(key, tampered)).rejects.toBeInstanceOf(DecryptionError);
   });
 
@@ -164,7 +164,7 @@ describe('AES-GCM cipher', () => {
     const key = await fastKey();
     const sealed = await encryptBytes(key, utf8Encode('untampered'));
     const tampered = { ...sealed, iv: Uint8Array.from(sealed.iv) };
-    tampered.iv[0] ^= 0xff;
+    tampered.iv.set([(tampered.iv[0] as number) ^ 0xff], 0);
     await expect(decryptBytes(key, tampered)).rejects.toBeInstanceOf(DecryptionError);
   });
 

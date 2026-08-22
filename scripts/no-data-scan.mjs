@@ -49,34 +49,63 @@ const CONTENT_EXEMPT = [
 /**
  * Content patterns that indicate real pack data.
  * Each is deliberately specific enough not to fire on ordinary source code.
+ *
+ * `neverExempt` marks the patterns that the SYNTHETIC_PRAGMA below cannot wave
+ * through. A telephone number is the actual personal data in this pack, so no
+ * file may contain one, whatever the author asserts about it.
  */
 const PATTERNS = [
   {
     // BRIEF §9.8 names this exact pattern. Real prefixes are ZSF / ZSG / ZSD.
     name: 'job reference (AAA###/#)',
     re: /\b[A-Z]{2,4}\d{3,4}\/\d\b/g,
+    neverExempt: false,
   },
   {
     name: 'UK London telephone number (customer circuit)',
     re: /\b020\d{8}\b/g,
+    neverExempt: true,
   },
   {
     name: 'MDF bar pair (##/A###)',
     re: /\b0[19]\/(?:[A-W]|INTL)\d{2,4}\b/g,
+    neverExempt: false,
   },
   {
     name: 'E-side tie reference',
     re: /\b\d{2}-E-\d{3}-U\d{2}-\d{3}\b/g,
+    neverExempt: false,
   },
   {
     name: 'D-side tie reference',
     re: /\b\d-D-\d{3}-U\d{2}-\d{3}\b/g,
+    neverExempt: false,
   },
   {
     name: 'LLU tie reference',
     re: /\bLLUA\d{6}\b/g,
+    neverExempt: false,
   },
 ];
+
+/**
+ * Deliberate, greppable opt-out for files that must contain reference-SHAPED
+ * strings to do their job: the synthetic fixture generator, its tests, and the
+ * doc comments that explain the formats.
+ *
+ * A blanket exemption for `tests/` would be easier and much worse — that is
+ * exactly where someone would paste a row of the real pack "just to check
+ * something". Requiring the author to type this line makes the exemption a
+ * conscious act, and `grep -rn` finds every file that claimed it.
+ *
+ * It never waives the telephone-number pattern (see `neverExempt` above).
+ */
+const SYNTHETIC_PRAGMA = 'no-data-scan: synthetic';
+
+/** The pragma only counts near the top of the file, where a reviewer sees it. */
+function claimsSynthetic(text) {
+  return text.split('\n', 40).some((line) => line.includes(SYNTHETIC_PRAGMA));
+}
 
 /** Text-ish files worth reading. Anything else is skipped. */
 const TEXTUAL = new Set([
@@ -126,12 +155,21 @@ function scan(files) {
       continue;
     }
 
-    for (const { name, re } of PATTERNS) {
+    const synthetic = claimsSynthetic(text);
+
+    for (const { name, re, neverExempt } of PATTERNS) {
+      if (synthetic && !neverExempt) continue;
+
       re.lastIndex = 0;
       const m = re.exec(text);
       if (m !== null) {
         const line = text.slice(0, m.index).split('\n').length;
-        violations.push({ file: `${norm}:${line}`, reason: `looks like ${name}` });
+        violations.push({
+          file: `${norm}:${line}`,
+          reason: synthetic
+            ? `looks like ${name} — and "${SYNTHETIC_PRAGMA}" does not cover this pattern`
+            : `looks like ${name}`,
+        });
       }
     }
   }
@@ -156,6 +194,10 @@ if (violations.length > 0) {
       '  Do NOT just delete the file and commit again: if this already reached a',
       '  remote, rewrite history with git filter-repo and treat the repo as leaked.',
       '  See README.md, "If job data is ever committed".',
+      '',
+      `  If — and only if — every reference in the file is fabricated, put the`,
+      `  line "${SYNTHETIC_PRAGMA}" in its first 40 lines. That never waives the`,
+      '  telephone-number check.',
       '',
     ].join('\n'),
   );

@@ -1,0 +1,351 @@
+import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { IDBFactory } from 'fake-indexeddb';
+import {
+  __resetDbForTests,
+  emptyVault,
+  flushSave,
+  hasVault,
+  listSnapshots,
+  loadMeta,
+  loadVault,
+  queueSave,
+  restoreSnapshot,
+  saveMeta,
+  saveVault,
+  wipeEverything,
+} from '../../src/data/repository';
+import { createVault, lock, unlock, __resetThrottleForTests } from '../../src/crypto/vault';
+import { buildJobs } from '../../src/import/buildJobs';
+import { detectRoles } from '../../src/import/columns';
+import { passGate } from '../../src/data/transitions';
+import type { Pack, Vault } from '../../src/data/types';
+import { SCHEMA_VERSION } from '../../src/data/types';
+import { syntheticHeaders, syntheticRows } from './fixtures/syntheticPack';
+
+const NOW = '2026-08-22T10:33:00.000Z';
+const PASSPHRASE = 'purple frame ladder Tuesday';
+
+function makePack(rows = 20): Pack {
+  const headers = syntheticHeaders();
+  const mapping = detectRoles(headers);
+  const { jobs } = buildJobs(syntheticRows({ rows }), headers, mapping, NOW);
+
+  return {
+    id: 'test-pack',
+    name: 'Test pack',
+    columns: headers,
+    constantColumns: { DB: 'LW' },
+    columnMapping: mapping,
+    importedAt: NOW,
+    lastImportedAt: NOW,
+    originalFileName: 'test.xlsx',
+    jobs,
+  };
+}
+
+function vaultWith(pack: Pack): Vault {
+  const vault = emptyVault();
+  vault.packs = [pack];
+  vault.activePackId = pack.id;
+  vault.settings.engineerName = 'Test Engineer';
+  return vault;
+}
+
+beforeEach(async () => {
+  // A fresh in-memory IndexedDB per test.
+  globalThis.indexedDB = new IDBFactory();
+  __resetDbForTests();
+  __resetThrottleForTests();
+  lock();
+  await createVault(PASSPHRASE);
+});
+
+afterEach(() => {
+  lock();
+});
+
+describe('vault meta', () => {
+  it('reports no vault before setup', async () => {
+    globalThis.indexedDB = new IDBFactory();
+    __resetDbForTests();
+    expect(await hasVault()).toBe(false);
+  });
+
+  it('round-trips the salt, KDF params and verifier', async () => {
+    lock();
+    __resetThrottleForTests();
+    const meta = await createVault(PASSPHRASE);
+    await saveMeta(meta);
+
+    const loaded = await loadMeta();
+    expect(loaded).not.toBeNull();
+    expect(loaded?.kdf).toEqual(meta.kdf);
+    expect([...(loaded?.salt ?? [])]).toEqual([...meta.salt]);
+    expect(await hasVault()).toBe(true);
+  }, 30_000);
+
+  it('unlocks from stored meta with the right passphrase only', async () => {
+    lock();
+    __resetThrottleForTests();
+    const meta = await createVault(PASSPHRASE);
+    await saveMeta(meta);
+    lock();
+
+    const stored = await loadMeta();
+    expect(stored).not.toBeNull();
+
+    await expect(unlock('the wrong passphrase', stored!)).rejects.toThrow(/incorrect passphrase/i);
+    await unlock(PASSPHRASE, stored!);
+    expect(await loadVault()).toBeNull(); // meta saved, blob not yet
+  }, 60_000);
+});
+
+describe('encrypted store', () => {
+  it('round-trips a full pack', async () => {
+    const vault = vaultWith(makePack(50));
+    await saveVault(vault);
+
+    const loaded = await loadVault();
+    expect(loaded).not.toBeNull();
+    expect(loaded?.packs[0]?.jobs).toHaveLength(50);
+    expect(loaded?.packs[0]?.jobs[0]?.jobNumber).toBe(vault.packs[0]?.jobs[0]?.jobNumber);
+    expect(loaded?.settings.engineerName).toBe('Test Engineer');
+    expect(loaded?.schemaVersion).toBe(SCHEMA_VERSION);
+  });
+
+  it('preserves progress and history through a save/load cycle', async () => {
+    const pack = makePack(10);
+    const job = pack.jobs[0]!;
+    const change = passGate(job, NOW, 'Test Engineer');
+    pack.jobs[0] = { ...job, progress: change.progress, history: change.history };
+
+    await saveVault(vaultWith(pack));
+    const loaded = await loadVault();
+
+    expect(loaded?.packs[0]?.jobs[0]?.progress.readyToActivate).toBe('yes');
+    expect(loaded?.packs[0]?.jobs[0]?.progress.activatedAt).toBe(NOW);
+    expect(loaded?.packs[0]?.jobs[0]?.history).toHaveLength(1);
+  });
+
+  it('returns null when nothing has been saved', async () => {
+    expect(await loadVault()).toBeNull();
+  });
+
+  it('refuses to read once locked', async () => {
+    await saveVault(vaultWith(makePack(5)));
+    lock();
+    await expect(loadVault()).rejects.toThrow(/locked/i);
+  });
+});
+
+/**
+ * BRIEF §11: "IndexedDB contains no readable circuit/telephone number, job
+ * number or note." This is the check that matters most — the pack is personal
+ * data. The test reads the raw stored records and asserts no plaintext.
+ */
+describe('nothing readable is written to IndexedDB', () => {
+  it('stores no job number, circuit number or note in the clear', async () => {
+    const pack = makePack(30);
+    const job = pack.jobs[0]!;
+    const secretNote = 'JUMPER-MISSING-CANARY-STRING';
+    pack.jobs[0] = { ...job, progress: { ...job.progress, notes: secretNote } };
+
+    const jobNumber = job.jobNumber;
+    const circuit = job.source.Circuit!;
+    const barPair = job.source['MDF BAR PAIR']!;
+    const equipment = job.source.Old_Equipment!;
+
+    await saveVault(vaultWith(pack));
+
+    // Read every record out of the raw database, exactly as DevTools would.
+    const raw = await dumpDatabase();
+
+    for (const needle of [secretNote, jobNumber, circuit, barPair, equipment, 'Test Engineer']) {
+      expect(raw).not.toContain(needle);
+    }
+
+    // The dump must actually contain the ciphertext, or the assertions above
+    // pass vacuously. 30 jobs seal to several kilobytes.
+    expect(raw.length).toBeGreaterThan(2000);
+  });
+
+  it('positive control: the same dump does find plaintext when it is there', async () => {
+    // Proves the check above can fail. Write the note unencrypted into the same
+    // database and confirm the dump surfaces it.
+    const canary = 'PLAINTEXT-CANARY-THAT-MUST-BE-FOUND';
+    const { openDB } = await import('idb');
+    const db = await openDB('pairtrack', 1, {
+      upgrade(database) {
+        if (!database.objectStoreNames.contains('meta')) database.createObjectStore('meta');
+        if (!database.objectStoreNames.contains('vault')) database.createObjectStore('vault');
+        if (!database.objectStoreNames.contains('snapshots')) {
+          database.createObjectStore('snapshots', { autoIncrement: true });
+        }
+      },
+    });
+    await db.put('meta', { leaked: canary, createdAt: NOW } as never, 'leak-test');
+    db.close();
+
+    expect(await dumpDatabase()).toContain(canary);
+  });
+
+  it('stores the salt and verifier but no passphrase', async () => {
+    lock();
+    __resetThrottleForTests();
+    const meta = await createVault(PASSPHRASE);
+    await saveMeta(meta);
+
+    const raw = await dumpDatabase();
+    expect(raw).not.toContain(PASSPHRASE);
+    // The KDF parameters are stored in the clear on purpose, so they can be
+    // migrated later.
+    expect(raw).toContain('PBKDF2');
+  }, 30_000);
+});
+
+/**
+ * Serialise the whole IndexedDB to a string, binary included — the programmatic
+ * equivalent of reading every record in the DevTools Application panel.
+ *
+ * Buffers are flattened to latin-1 text rather than JSON-stringified: an
+ * ArrayBuffer serialises to `{}`, which would make the test pass vacuously.
+ */
+async function dumpDatabase(): Promise<string> {
+  const { openDB } = await import('idb');
+  const db = await openDB('pairtrack', 1);
+  const chunks: string[] = [];
+
+  for (const storeName of [...db.objectStoreNames]) {
+    for (const value of await db.getAll(storeName)) {
+      chunks.push(flatten(value));
+    }
+  }
+
+  db.close();
+  return chunks.join('\n');
+}
+
+function flatten(value: unknown): string {
+  if (value === null || value === undefined) return String(value);
+
+  // Duck-typed rather than `instanceof`: fake-indexeddb hands back buffers from
+  // its own realm, so `instanceof ArrayBuffer` is false and every byte would be
+  // silently skipped.
+  if (typeof value === 'object') {
+    const maybeBuffer = value as { byteLength?: unknown; buffer?: unknown };
+    if (typeof maybeBuffer.byteLength === 'number') {
+      const bytes =
+        maybeBuffer.buffer !== undefined
+          ? new Uint8Array(maybeBuffer.buffer as ArrayBuffer)
+          : new Uint8Array(value as ArrayBuffer);
+      return latin1(bytes);
+    }
+    if (Array.isArray(value)) return value.map(flatten).join(' ');
+    return Object.entries(value as Record<string, unknown>)
+      .map(([key, inner]) => `${key}=${flatten(inner)}`)
+      .join(' ');
+  }
+
+  return String(value);
+}
+
+/** Bytes as latin-1 text, so any embedded plaintext would show up verbatim. */
+function latin1(bytes: Uint8Array): string {
+  let out = '';
+  for (const byte of bytes) out += String.fromCharCode(byte);
+  return out;
+}
+
+describe('snapshot rollback ring', () => {
+  it('keeps the previous blob after each save, capped at five', async () => {
+    const pack = makePack(5);
+
+    for (let i = 0; i < 8; i += 1) {
+      const vault = vaultWith(pack);
+      vault.settings.engineerName = `Engineer ${i}`;
+      await saveVault(vault);
+    }
+
+    const snapshots = await listSnapshots();
+    expect(snapshots).toHaveLength(5);
+  });
+
+  it('restores a previous snapshot', async () => {
+    const pack = makePack(5);
+
+    const first = vaultWith(pack);
+    first.settings.engineerName = 'First';
+    await saveVault(first);
+
+    const second = vaultWith(pack);
+    second.settings.engineerName = 'Second';
+    await saveVault(second);
+
+    const snapshots = await listSnapshots();
+    expect(snapshots.length).toBeGreaterThan(0);
+
+    const restored = await restoreSnapshot(snapshots[0]!.key);
+    expect(restored?.settings.engineerName).toBe('First');
+  });
+});
+
+describe('debounced write-through', () => {
+  it('coalesces rapid changes into one write and never loses the last one', async () => {
+    const pack = makePack(5);
+
+    for (let i = 0; i < 20; i += 1) {
+      const vault = vaultWith(pack);
+      vault.settings.engineerName = `Engineer ${i}`;
+      queueSave(vault);
+    }
+
+    await flushSave();
+
+    const loaded = await loadVault();
+    expect(loaded?.settings.engineerName).toBe('Engineer 19');
+
+    // 20 ticks produced one write, so the ring holds nothing yet.
+    expect(await listSnapshots()).toHaveLength(0);
+  });
+
+  it('flushing with nothing pending is a no-op', async () => {
+    await expect(flushSave()).resolves.toBeUndefined();
+  });
+});
+
+describe('wipe', () => {
+  it('removes everything, irreversibly', async () => {
+    await saveVault(vaultWith(makePack(10)));
+    const meta = await loadMeta();
+    expect(meta).toBeNull(); // saveMeta was not called in this test
+
+    await wipeEverything();
+    __resetDbForTests();
+
+    expect(await hasVault()).toBe(false);
+    expect(await loadVault()).toBeNull();
+  });
+});
+
+describe('migration', () => {
+  it('fills in fields a newer version added, rather than crashing', async () => {
+    // A vault written by a hypothetical older build: no settings.view, no history.
+    const pack = makePack(3);
+    const legacy = {
+      schemaVersion: 1,
+      packs: [{ ...pack, jobs: pack.jobs.map(({ ...job }) => ({ ...job, history: undefined })) }],
+      activePackId: pack.id,
+      settings: { engineerName: 'Old', autoLockMinutes: 5 },
+    } as unknown as Vault;
+
+    await saveVault(legacy);
+    const loaded = await loadVault();
+
+    expect(loaded?.settings.view).toBeDefined();
+    expect(loaded?.settings.view.sortField).toBe('framePosition');
+    expect(loaded?.settings.failReasons.length).toBeGreaterThan(0);
+    expect(loaded?.settings.engineerName).toBe('Old');
+    expect(loaded?.settings.autoLockMinutes).toBe(5);
+    expect(loaded?.packs[0]?.jobs[0]?.history).toEqual([]);
+  });
+});
