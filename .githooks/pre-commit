@@ -1,0 +1,72 @@
+#!/bin/sh
+#
+# PairTrack pre-commit hook — BRIEF.md §9.8
+#
+# Blocks any commit that stages job-pack data. The pack contains 442 real
+# customer telephone numbers; a commit is a personal-data breach, so this hook
+# refuses rather than warns.
+#
+# Installed by `npm run setup` (and by postinstall) via:
+#     git config core.hooksPath .githooks
+#
+# To bypass in a genuine emergency: git commit --no-verify
+# Do not make a habit of it. CI runs the same scan and will fail the push.
+
+set -e
+
+staged=$(git diff --cached --name-only --diff-filter=ACMR)
+
+if [ -z "$staged" ]; then
+  exit 0
+fi
+
+fail() {
+  printf '\n\033[31mpre-commit: BLOCKED\033[0m\n%s\n\n' "$1" >&2
+  printf '  The job pack is personal data. Nothing derived from it belongs in git.\n' >&2
+  printf '  Bypass only if you are certain: git commit --no-verify\n\n' >&2
+  exit 1
+}
+
+# ---------------------------------------------------------------------------
+# 1. Forbidden file types, by path.
+# ---------------------------------------------------------------------------
+bad_files=$(printf '%s\n' "$staged" | grep -Ei '\.(xlsx|xls|xlsm|xlsb|csv|ptbak)$' || true)
+if [ -n "$bad_files" ]; then
+  fail "  Spreadsheet / backup files are staged:
+$(printf '%s\n' "$bad_files" | sed 's/^/    /')"
+fi
+
+# SESSION.md is untracked working context and must never be committed (§16).
+session=$(printf '%s\n' "$staged" | grep -E '^SESSION\.md$' || true)
+if [ -n "$session" ]; then
+  fail "  SESSION.md is staged. It is untracked working context (BRIEF §16)."
+fi
+
+# ---------------------------------------------------------------------------
+# 2. Staged *content* that looks like a job reference.
+#    reference/, BRIEF.md and docs/ are exempt — they describe the patterns in
+#    order to ban them. reference/*.png is the declared exception in §9.8:
+#    four real job numbers are legible in the screenshots, nothing else.
+# ---------------------------------------------------------------------------
+scan_files=$(printf '%s\n' "$staged" \
+  | grep -Ev '^(reference/|docs/|BRIEF\.md$|scripts/no-data-scan\.mjs$|\.githooks/pre-commit$)' \
+  | grep -Ev '\.(png|jpg|jpeg|gif|webp|ico|woff2?|ttf|otf|pdf|zip)$' || true)
+
+if [ -n "$scan_files" ]; then
+  # Delegate the content patterns to the same scanner CI uses, so the two can
+  # never drift apart.
+  if command -v node >/dev/null 2>&1; then
+    # shellcheck disable=SC2086
+    printf '%s\n' "$scan_files" | tr '\n' '\0' | xargs -0 node scripts/no-data-scan.mjs || exit 1
+  else
+    # Fallback if node is unavailable: the single pattern named in BRIEF §9.8.
+    hits=$(printf '%s\n' "$scan_files" | tr '\n' '\0' \
+      | xargs -0 grep -nEI '\b[A-Z]{2,4}[0-9]{3,4}/[0-9]\b' 2>/dev/null || true)
+    if [ -n "$hits" ]; then
+      fail "  Staged content matches a job-reference pattern:
+$(printf '%s\n' "$hits" | sed 's/^/    /')"
+    fi
+  fi
+fi
+
+exit 0

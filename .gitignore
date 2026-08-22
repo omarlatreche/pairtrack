@@ -1,0 +1,39 @@
+# ---------------------------------------------------------------------------
+# JOB DATA — never commit. See BRIEF.md §9.8.
+# The pack contains 442 real customer telephone numbers. A commit here is a
+# personal-data breach, not a mistake. The pre-commit hook enforces this too.
+# ---------------------------------------------------------------------------
+*.xlsx
+*.xls
+*.xlsm
+*.xlsb
+*.csv
+*.ptbak
+/data/
+/jobs/
+/packs/
+/scratch/
+*.local.*
+
+# Working context — untracked by design (BRIEF.md §16)
+/SESSION.md
+
+# Build + tooling
+node_modules/
+dist/
+dist-ssr/
+coverage/
+playwright-report/
+test-results/
+blob-report/
+.playwright/
+*.tsbuildinfo
+.vite/
+
+# OS / editor
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/*
+!.vscode/extensions.json
+*.swp
