@@ -96,6 +96,24 @@ backups.
 **It works with no signal, always.** Aeroplane mode, a basement, a chamber in the rain —
 it makes no difference. It never needed a connection in the first place.
 
+**There is no server, and nothing syncs.** This one catches people out, so it is worth
+being blunt about:
+
+- Your jobs live on **this phone only**. Not in an account, not in a cloud, nowhere else.
+- Changing your passphrase changes it **on this phone**. It does not travel anywhere,
+  because there is nowhere for it to travel to.
+- Install PairTrack on a second phone and you get a **blank, separate** app. It will not
+  see your jobs.
+- **The encrypted backup is the only way your work moves or survives.** Lose the phone
+  with no backup and the work is gone. That is not a bug — it is the same property that
+  means a thief who finds your phone gets nothing.
+
+So: take a backup after every import, and again at the end of a heavy day.
+
+**Changing your passphrase does not change your old backups.** Each backup is sealed with
+whatever passphrase was in use when you made it. Change your passphrase and yesterday's
+backup still needs yesterday's one. Take a fresh backup straight after changing it.
+
 **Nothing is lost.** Every tick is saved as you make it. A flat battery or a force-quit
 does not cost you a job.
 
