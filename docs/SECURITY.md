@@ -142,6 +142,15 @@ object-src 'none'; base-uri 'none'; frame-ancestors 'none'; form-action 'none'
 attributes used by list virtualisation. It does not permit inline *script*, which is what
 matters for XSS.
 
+**`frame-ancestors` is a header-only directive.** Browsers ignore it inside a `<meta>`
+tag, so it appears in `_headers` (Cloudflare Pages) but not in `index.html`. Consequence,
+stated plainly: **on GitHub Pages, which cannot set response headers, the app can be
+framed by another site.** That matters far less here than it would for a normal web app —
+there is no session cookie to ride, no server endpoint to CSRF, and every action needs a
+passphrase-derived key that lives only in memory — but it is a real difference between
+option A and option C in BRIEF §8, and it is one more reason option C is the stronger
+choice.
+
 Also set: `Referrer-Policy: no-referrer`, `X-Content-Type-Options: nosniff`.
 
 `npm run build` runs `scripts/check-no-external-origins.mjs` over `dist/` and **fails the

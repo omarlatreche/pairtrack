@@ -1,0 +1,59 @@
+<!doctype html>
+<html lang="en-GB">
+  <head>
+    <meta charset="utf-8" />
+    <meta
+      name="viewport"
+      content="width=device-width, initial-scale=1, viewport-fit=cover, maximum-scale=5"
+    />
+
+    <!--
+      Content-Security-Policy — BRIEF §9.7.
+
+      Applied as a meta tag as well as a header, so it holds even on a host that
+      strips headers. connect-src 'self' is what makes "no network requests at
+      runtime" enforceable by the browser rather than a promise in a README.
+
+      style-src 'unsafe-inline' is the one relaxation: inline style attributes
+      are used for list virtualisation spacers. It does not permit inline
+      script, which is what matters for XSS.
+
+      frame-ancestors is deliberately NOT here. The browser ignores it in a
+      meta tag and logs an error for it on every load, so listing it would buy
+      nothing and hide real CSP errors in the noise. It is set in _headers,
+      which covers Cloudflare Pages (BRIEF section 8 option C). On GitHub
+      Pages, which cannot set response headers, framing protection is
+      genuinely unavailable -- see docs/SECURITY.md.
+    -->
+    <meta
+      http-equiv="Content-Security-Policy"
+      content="default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; font-src 'self'; connect-src 'self'; object-src 'none'; base-uri 'none'; form-action 'none'; manifest-src 'self'; worker-src 'self' blob:"
+    />
+    <meta name="referrer" content="no-referrer" />
+
+    <title>PairTrack</title>
+    <meta
+      name="description"
+      content="Offline job-pack tracker for Openreach frame work. Everything stays on your phone, encrypted."
+    />
+
+    <meta name="theme-color" content="#0d1117" />
+    <meta name="color-scheme" content="dark light" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+    <meta name="apple-mobile-web-app-title" content="PairTrack" />
+    <meta name="mobile-web-app-capable" content="yes" />
+    <meta name="format-detection" content="telephone=no" />
+
+    <link rel="manifest" href="./manifest.webmanifest" />
+    <link rel="icon" href="./icons/icon.svg" type="image/svg+xml" />
+    <link rel="apple-touch-icon" href="./icons/icon-192.png" />
+  </head>
+  <body>
+    <div id="app"></div>
+    <noscript>
+      PairTrack needs JavaScript. It runs entirely on your phone — there is no server.
+    </noscript>
+    <script type="module" src="/src/main.tsx"></script>
+  </body>
+</html>

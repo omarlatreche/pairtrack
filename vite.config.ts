@@ -21,6 +21,12 @@ export default defineConfig(() => {
     build: {
       target: 'es2022',
       sourcemap: false,
+      // Vite's modulepreload polyfill calls fetch(). It is same-origin and
+      // harmless, but it is the only network call in the whole bundle, and
+      // "zero network APIs" is a much easier guarantee to verify than "one
+      // network call, and here is why it is fine". Every browser that supports
+      // the es2022 target supports modulepreload natively.
+      modulePreload: { polyfill: false },
       // 442 jobs is nothing, but xlsx is ~900KB. It is dynamically imported so
       // it never blocks first paint; the service worker precaches it so import
       // and export still work offline.

@@ -12,7 +12,7 @@
     "setup": "git config core.hooksPath .githooks",
     "postinstall": "node scripts/install-hooks.mjs",
     "dev": "vite",
-    "build": "tsc --noEmit && vite build && npm run check:origins",
+    "build": "tsc --noEmit && vite build && node scripts/build-sw.mjs dist && npm run check:origins",
     "preview": "vite preview",
     "typecheck": "tsc --noEmit",
     "lint": "eslint .",
@@ -22,7 +22,8 @@
     "test:e2e": "playwright test",
     "check:data": "node scripts/no-data-scan.mjs",
     "check:origins": "node scripts/check-no-external-origins.mjs dist",
-    "verify": "npm run typecheck && npm run lint && npm run test && npm run build && npm run check:data"
+    "verify": "npm run typecheck && npm run lint && npm run test && npm run build && npm run check:data",
+    "icons": "node scripts/make-icons.mjs"
   },
   "dependencies": {
     "idb": "^8.0.3",
