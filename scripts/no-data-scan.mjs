@@ -28,20 +28,25 @@ const RESET = '\u001b[0m';
 const FORBIDDEN_EXT = new Set(['.xlsx', '.xls', '.xlsm', '.xlsb', '.csv', '.ptbak']);
 
 /**
- * Paths exempt from *content* scanning.
+ * Paths exempt from *content* scanning — for the waivable patterns only.
  *
- * - reference/*.png: phone screenshots of the existing tool. Four real job
- *   numbers are legible in them; no telephone numbers, bar pairs, ties or
- *   equipment refs appear anywhere in reference/. Declared exception, BRIEF
- *   §9.8 — and they are binary, so content scanning would not see them anyway.
- * - BRIEF.md, reference/*.md, docs/: these describe the patterns in order to
- *   ban them, so they necessarily contain example patterns. No real values.
- * - the scanner and the hook: they contain the patterns by definition.
+ * A `neverExempt` pattern (the telephone number) still runs against every file
+ * in this list. Nothing may waive that one; it is the actual personal data.
+ *
+ * Each entry is named individually rather than by directory. A blanket
+ * `^docs/` would silently exempt every file anyone adds there later, which is
+ * how a worked example containing a real circuit number would get in.
  */
 const CONTENT_EXEMPT = [
-  /^reference\//,
+  // The declared §9.8 exception: four real job numbers are legible in these
+  // screenshots. Binary, so content scanning would not see them anyway.
+  /^reference\/.*\.(png|jpe?g|gif|webp)$/,
+  // These describe the patterns in order to ban them, so they necessarily
+  // contain example shapes. Named individually rather than by directory: a
+  // blanket `^docs/` would exempt every file anyone adds there later.
+  /^reference\/(README|SCHEMA)\.md$/,
   /^BRIEF\.md$/,
-  /^docs\//,
+  /^docs\/(SECURITY|DATA-MODEL|DECISIONS|FIELD-GUIDE)\.md$/,
   /^scripts\/no-data-scan\.mjs$/,
   /^\.githooks\/pre-commit$/,
 ];
@@ -63,7 +68,11 @@ const PATTERNS = [
   },
   {
     name: 'UK London telephone number (customer circuit)',
-    re: /\b020\d{8}\b/g,
+    // Allows an optional space or hyphen between the groups. The pack stores
+    // them unseparated; a human pasting one into a doc will not. Deliberately
+    // written without an example, because this file is not exempt from its own
+    // never-waivable pattern and should not be.
+    re: /\b020[\s-]?\d{4}[\s-]?\d{4}\b/g,
     neverExempt: true,
   },
   {
@@ -137,8 +146,8 @@ function scan(files) {
       continue;
     }
 
-    if (isExemptFromContent(norm)) continue;
     if (!TEXTUAL.has(ext)) continue;
+    const exempt = isExemptFromContent(norm);
 
     let stat;
     try {
@@ -158,7 +167,12 @@ function scan(files) {
     const synthetic = claimsSynthetic(text);
 
     for (const { name, re, neverExempt } of PATTERNS) {
-      if (synthetic && !neverExempt) continue;
+      // A `neverExempt` pattern runs against EVERY file. The path exemption
+      // used to be applied before this loop, which meant docs/ and reference/
+      // were waved through on the telephone-number check as well — the one
+      // check whose whole point is that nothing may waive it. A worked example
+      // pasted into a doc would have passed the hook and passed CI.
+      if (!neverExempt && (exempt || synthetic)) continue;
 
       re.lastIndex = 0;
       const m = re.exec(text);
@@ -166,9 +180,10 @@ function scan(files) {
         const line = text.slice(0, m.index).split('\n').length;
         violations.push({
           file: `${norm}:${line}`,
-          reason: synthetic
-            ? `looks like ${name} — and "${SYNTHETIC_PRAGMA}" does not cover this pattern`
-            : `looks like ${name}`,
+          reason:
+            synthetic || exempt
+              ? `looks like ${name} — and nothing may waive this pattern`
+              : `looks like ${name}`,
         });
       }
     }

@@ -310,8 +310,8 @@ button {
 .search__clear {
   display: grid;
   place-items: center;
-  width: 32px;
-  height: 32px;
+  width: var(--tap);
+  height: var(--tap);
   border-radius: 50%;
   color: var(--text-dim);
 }
@@ -333,10 +333,12 @@ button {
   display: inline-flex;
   align-items: center;
   gap: 6px;
-  height: 36px;
-  padding: 0 12px;
+  /* 44px floor, BRIEF §7.11. These sit in a row that also scrolls sideways,
+     so a gloved thumb aiming for one is exactly the mis-hit the floor is for. */
+  height: var(--tap);
+  padding: 0 14px;
   border: 1px solid var(--border);
-  border-radius: 18px;
+  border-radius: 22px;
   background: var(--bg-raised);
   color: var(--text-dim);
   font-size: 14px;
@@ -375,10 +377,10 @@ button {
   display: inline-flex;
   align-items: center;
   gap: 6px;
-  height: 36px;
-  padding: 0 12px;
+  height: var(--tap);
+  padding: 0 14px;
   border: 1px solid var(--border-strong);
-  border-radius: 18px;
+  border-radius: 22px;
   background: var(--bg-raised);
   font-size: 13px;
   font-weight: 700;
@@ -615,7 +617,9 @@ button {
 .card__actions {
   display: flex;
   flex-direction: column;
-  gap: 10px;
+  /* Well separated, BRIEF §7.3: 10px is under a millimetre of glove, and the
+     two buttons mean opposite things. */
+  gap: 18px;
   align-self: center;
 }
 
@@ -1195,13 +1199,24 @@ button {
   border: 0;
 }
 
-/* --- Desktop table (>=900px only) — BRIEF §7.3 --------------------------- */
+/* --- Desktop table — BRIEF §7.3 ------------------------------------------ */
 
 .table-wrap {
   display: none;
 }
 
-@media (min-width: 900px) {
+/*
+ * Width alone is not enough to mean "desktop".
+ *
+ * An iPhone Pro Max in landscape is 932-956px, so a plain `min-width: 900px`
+ * hands him the fifteen-column table the moment he turns the phone sideways —
+ * the exact 22-seconds-of-sideways-scrolling experience this app exists to
+ * replace. The manifest asks for portrait, but iOS Safari ignores that.
+ *
+ * `min-height` rules out a phone on its side, and `pointer: fine` rules out a
+ * touchscreen. Together they mean a desk.
+ */
+@media (min-width: 900px) and (min-height: 600px) and (pointer: fine) {
   .list--cards {
     display: none;
   }
@@ -1269,7 +1284,7 @@ button {
 
 /* --- Larger text (BRIEF §7.11: usable at 200%) --------------------------- */
 
-@media (min-width: 900px) {
+@media (min-width: 900px) and (min-height: 600px) and (pointer: fine) {
   .dock {
     max-width: 900px;
     margin: 0 auto;

@@ -11,10 +11,12 @@ import { LockIcon } from '../components/Icons';
 
 interface LockScreenProps {
   readonly meta: VaultMeta;
+  /** Set when a correct passphrase still could not open the store. */
+  readonly fatalError?: string | null;
   readonly onUnlocked: () => void;
 }
 
-export function LockScreen({ meta, onUnlocked }: LockScreenProps) {
+export function LockScreen({ meta, fatalError, onUnlocked }: LockScreenProps) {
   const [passphrase, setPassphrase] = useState('');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -74,6 +76,13 @@ export function LockScreen({ meta, onUnlocked }: LockScreenProps) {
             onInput={(event) => setPassphrase((event.target as HTMLInputElement).value)}
           />
         </label>
+
+        {fatalError != null && (
+          <div class="callout callout--danger" role="alert">
+            <strong>Unlocked, but the data could not be read</strong>
+            <p>{fatalError}</p>
+          </div>
+        )}
 
         {error !== null && (
           <div class="callout callout--danger" role="alert">

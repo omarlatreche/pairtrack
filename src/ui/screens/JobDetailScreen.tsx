@@ -6,7 +6,7 @@
  * segmented controls, and a per-job change history at the bottom — that history
  * is what saves him when the office queries a job three weeks later.
  */
-import { useState } from 'preact/hooks';
+import { useEffect, useRef, useState } from 'preact/hooks';
 import { formatBarPair } from '../../data/barPair';
 import { failReasonLabel } from '../../data/failReasons';
 import { deriveStatus, GATE_LABELS, STATUS_LABELS } from '../../data/transitions';
@@ -31,6 +31,41 @@ interface JobDetailScreenProps {
   readonly settings: Settings;
 }
 
+/**
+ * Commit a free-text field as he types, debounced.
+ *
+ * These used to commit on blur only. A note typed at the frame and never blurred
+ * — because the phone went in his pocket — was written nowhere: the
+ * `visibilitychange` flush saves the vault as it stands, without the note, and
+ * the auto-lock then unmounts the component with no blur event. The note is
+ * simply gone, and it is the single most expensive thing to retype in gloves.
+ * BRIEF §3.6: a force-quit must not cost a tick.
+ */
+function useDebouncedCommit(commit: (value: string) => void, delay = 400) {
+  const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const latest = useRef<{ value: string; dirty: boolean }>({ value: '', dirty: false });
+  const commitRef = useRef(commit);
+  commitRef.current = commit;
+
+  useEffect(() => {
+    return () => {
+      // Unmount — including the unmount an auto-lock causes — flushes whatever
+      // has not been committed yet.
+      if (timer.current !== null) clearTimeout(timer.current);
+      if (latest.current.dirty) commitRef.current(latest.current.value);
+    };
+  }, []);
+
+  return (value: string) => {
+    latest.current = { value, dirty: true };
+    if (timer.current !== null) clearTimeout(timer.current);
+    timer.current = setTimeout(() => {
+      latest.current.dirty = false;
+      commitRef.current(value);
+    }, delay);
+  };
+}
+
 const DEFECT_LABELS: Record<string, string> = {
   'bad-barpair': 'The bar pair in the pack is not a valid frame reference.',
   'bad-old-equipment': 'The old equipment reference is malformed — the port segment is missing.',
@@ -47,13 +82,38 @@ export function JobDetailScreen({ job, pack, settings }: JobDetailScreenProps) {
   const [upDraft, setUpDraft] = useState(job.progress.up ?? '');
   const [byDraft, setByDraft] = useState(job.progress.completedBy ?? settings.engineerName);
 
+  const commitNotes = useDebouncedCommit((value) => setNotes(job.id, value));
+  const commitBy = useDebouncedCommit((value) => setCompletedBy(job.id, value));
+
+  // VERT and UP are written as a pair, so the debounced commit must not read
+  // them out of render-scoped state — by the time it fires, the value that
+  // triggered it may not be the one in scope. Refs are updated synchronously
+  // on input, so they are always the pair he actually typed.
+  const vertRef = useRef(vertDraft);
+  const upRef = useRef(upDraft);
+  const blank = (value: string) => (value.trim() === '' ? null : value.trim());
+  const commitVertUp = useDebouncedCommit(() =>
+    setVertUp(job.id, blank(vertRef.current), blank(upRef.current)),
+  );
+
   const barPairColumn = headerForRole(pack.columnMapping, 'barPair');
   const oldEquipColumn = headerForRole(pack.columnMapping, 'oldEquipment');
 
-  const correctableColumns = [
-    job.defects.includes('bad-barpair') ? barPairColumn : null,
-    job.defects.includes('bad-old-equipment') ? oldEquipColumn : null,
-  ].filter((column): column is string => column !== null);
+  /*
+   * Which correction fields to show, decided ONCE when the screen opens.
+   *
+   * Deriving this from the live defect list looks tidier and is wrong: the
+   * value commits as he types, so a half-typed "01/Z1" already parses, the
+   * defect clears, and the input unmounts underneath him before he can finish
+   * typing "01/Z1234". Freezing the list keeps the field on screen for as long
+   * as he is on the screen.
+   */
+  const [correctableColumns] = useState<string[]>(() =>
+    [
+      job.defects.includes('bad-barpair') ? barPairColumn : null,
+      job.defects.includes('bad-old-equipment') ? oldEquipColumn : null,
+    ].filter((column): column is string => column !== null),
+  );
 
   return (
     <div class="panel">
@@ -94,13 +154,16 @@ export function JobDetailScreen({ job, pack, settings }: JobDetailScreenProps) {
           <input
             class="input input--mono"
             defaultValue={job.source[column] ?? ''}
+            onInput={(event) =>
+              correctSourceValue(job.id, column, (event.target as HTMLInputElement).value)
+            }
             onBlur={(event) =>
               correctSourceValue(job.id, column, (event.target as HTMLInputElement).value)
             }
           />
           <p class="field__hint">
-            The value from the pack is kept until you change it. Fixing it here puts the job back
-            in frame-walk order.
+            Saved as you type. Fixing it puts the job back into frame-walk order — the badge above
+            updates as soon as the value is valid.
           </p>
         </label>
       ))}
@@ -234,14 +297,13 @@ export function JobDetailScreen({ job, pack, settings }: JobDetailScreenProps) {
               class="input input--mono"
               inputMode="numeric"
               value={vertDraft}
-              onInput={(event) => setVertDraft((event.target as HTMLInputElement).value)}
-              onBlur={() =>
-                setVertUp(
-                  job.id,
-                  vertDraft.trim() === '' ? null : vertDraft.trim(),
-                  upDraft.trim() === '' ? null : upDraft.trim(),
-                )
-              }
+              onInput={(event) => {
+                const value = (event.target as HTMLInputElement).value;
+                vertRef.current = value;
+                setVertDraft(value);
+                commitVertUp(value);
+              }}
+              onBlur={() => setVertUp(job.id, blank(vertRef.current), blank(upRef.current))}
             />
           </label>
 
@@ -251,14 +313,13 @@ export function JobDetailScreen({ job, pack, settings }: JobDetailScreenProps) {
               class="input input--mono"
               inputMode="numeric"
               value={upDraft}
-              onInput={(event) => setUpDraft((event.target as HTMLInputElement).value)}
-              onBlur={() =>
-                setVertUp(
-                  job.id,
-                  vertDraft.trim() === '' ? null : vertDraft.trim(),
-                  upDraft.trim() === '' ? null : upDraft.trim(),
-                )
-              }
+              onInput={(event) => {
+                const value = (event.target as HTMLInputElement).value;
+                upRef.current = value;
+                setUpDraft(value);
+                commitVertUp(value);
+              }}
+              onBlur={() => setVertUp(job.id, blank(vertRef.current), blank(upRef.current))}
             />
           </label>
         </div>
@@ -268,7 +329,11 @@ export function JobDetailScreen({ job, pack, settings }: JobDetailScreenProps) {
           <textarea
             class="textarea"
             value={notesDraft}
-            onInput={(event) => setNotesDraft((event.target as HTMLTextAreaElement).value)}
+            onInput={(event) => {
+              const value = (event.target as HTMLTextAreaElement).value;
+              setNotesDraft(value);
+              commitNotes(value);
+            }}
             onBlur={() => setNotes(job.id, notesDraft)}
           />
         </label>
@@ -278,7 +343,11 @@ export function JobDetailScreen({ job, pack, settings }: JobDetailScreenProps) {
           <input
             class="input"
             value={byDraft}
-            onInput={(event) => setByDraft((event.target as HTMLInputElement).value)}
+            onInput={(event) => {
+              const value = (event.target as HTMLInputElement).value;
+              setByDraft(value);
+              commitBy(value);
+            }}
             onBlur={() => setCompletedBy(job.id, byDraft)}
           />
         </label>

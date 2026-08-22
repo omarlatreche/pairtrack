@@ -35,8 +35,9 @@ export function naturalCompare(a: string, b: string): number {
 
     if (lNumeric && rNumeric) {
       // Compare as numbers so 2 < 10. Leading zeros are insignificant here;
-      // if the numbers are equal, the longer (more padded) run sorts first so
-      // the ordering stays stable and total.
+      // when the values are equal, the SHORTER run sorts first ("7" before
+      // "07"), which is arbitrary but consistent — and consistency is what
+      // makes this a total order rather than something Array.sort can trip on.
       const ln = Number(l);
       const rn = Number(r);
       if (ln !== rn) return ln < rn ? -1 : 1;

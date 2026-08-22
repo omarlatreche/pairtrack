@@ -8,7 +8,14 @@
 import { render } from 'preact';
 import { App } from './ui/App';
 import { setState } from './state/store';
+import { setBeforeAutoLock } from './crypto/autolock';
+import { flushSave } from './data/repository';
 import './ui/styles.css';
+
+// An automatic lock must not drop a change still sitting in the debounce
+// window. src/crypto/ deliberately does not import src/data/, so the wiring
+// happens here instead.
+setBeforeAutoLock(flushSave);
 
 const root = document.getElementById('app');
 if (root === null) throw new Error('Missing #app');

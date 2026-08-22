@@ -49,6 +49,14 @@ export interface SyntheticOptions {
   readonly withPhantomColumns?: boolean;
   /** Prefix a literal apostrophe to equipment values, as the real file does. */
   readonly withLeadingApostrophes?: boolean;
+  /**
+   * Give one header a trailing space, as a Power Query source easily can.
+   * This silently emptied the whole column before the importer read cells by
+   * index instead of by header name.
+   */
+  readonly headerWithTrailingSpace?: string;
+  /** Repeat a header name, which sheet_to_json would rename behind your back. */
+  readonly duplicateHeader?: string;
 }
 
 /**
@@ -125,8 +133,18 @@ export function syntheticRows(options: SyntheticOptions = {}): Array<Record<stri
   return out;
 }
 
-export function syntheticHeaders(withPhantomColumns = false): string[] {
-  const headers: string[] = [...HEADERS];
+export function syntheticHeaders(
+  withPhantomColumns = false,
+  options: Pick<SyntheticOptions, 'headerWithTrailingSpace' | 'duplicateHeader'> = {},
+): string[] {
+  let headers: string[] = [...HEADERS];
+
+  if (options.headerWithTrailingSpace !== undefined) {
+    const target = options.headerWithTrailingSpace;
+    headers = headers.map((h) => (h === target ? `${h} ` : h));
+  }
+
+  if (options.duplicateHeader !== undefined) headers.push(options.duplicateHeader);
   if (withPhantomColumns) headers.push('', ' ', '  ', '   ', '    ');
   return headers;
 }
@@ -137,10 +155,15 @@ export function syntheticHeaders(withPhantomColumns = false): string[] {
  */
 export async function syntheticWorkbookBytes(options: SyntheticOptions = {}): Promise<ArrayBuffer> {
   const XLSX = await import('xlsx');
-  const headers = syntheticHeaders(options.withPhantomColumns);
+  const headers = syntheticHeaders(options.withPhantomColumns, options);
   const rows = syntheticRows(options);
 
-  const aoa: unknown[][] = [headers, ...rows.map((row) => headers.map((h) => row[h] ?? ''))];
+  // Values are looked up by the TRIMMED header, so a deliberately untidy
+  // header still gets its real column data written into the sheet.
+  const aoa: unknown[][] = [
+    headers,
+    ...rows.map((row) => headers.map((h) => row[h.trim()] ?? row[h] ?? '')),
+  ];
   const sheet = XLSX.utils.aoa_to_sheet(aoa);
   const workbook = XLSX.utils.book_new();
   XLSX.utils.book_append_sheet(workbook, sheet, '<exchange redacted> - TEST');

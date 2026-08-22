@@ -199,28 +199,65 @@ export function setGate(
   const p = { ...job.progress };
   let history = job.history;
 
+  /** Clear the fail reason once neither gate is in a failed state. */
+  function clearReasonIfResolved(): void {
+    if (p.readyToActivate === 'failed' || p.testStatus === 'fail') return;
+    if (p.failReason === null) return;
+    history = record(history, now, 'Fail reason', p.failReason, null);
+    p.failReason = null;
+  }
+
+  /** Clearing a gate clears everything downstream of it. */
+  function clearTest(): void {
+    if (p.testStatus === null && p.testedAt === null) return;
+    history = record(history, now, 'Test status', p.testStatus, null);
+    p.testStatus = null;
+    p.testedAt = null;
+  }
+
+  function clearCompleted(): void {
+    if (p.completedAt === null) return;
+    history = record(history, now, 'Completed', p.completedAt, null);
+    p.completedAt = null;
+    p.completedBy = null;
+  }
+
   if (gate === 'activate') {
     const next = value === 'yes' || value === 'failed' ? value : null;
     history = record(history, now, 'Ready to activate', p.readyToActivate, next);
     p.readyToActivate = next;
     p.activatedAt = next === 'yes' ? now : null;
-    if (next !== 'failed' && p.testStatus === null) {
-      p.failReason = null;
+
+    // The gates are ordered, and the export presents them as an ordered record.
+    // Nothing downstream can stand without a successful activation, so undoing
+    // one has to undo what followed it — otherwise the office receives a row
+    // reading "not activated, test passed, completed".
+    if (next !== 'yes') {
+      clearTest();
+      clearCompleted();
     }
   } else if (gate === 'test') {
     const next = value === 'pass' || value === 'fail' ? value : null;
     history = record(history, now, 'Test status', p.testStatus, next);
     p.testStatus = next;
     p.testedAt = next === null ? null : now;
-    if (next !== 'fail' && p.readyToActivate !== 'failed') {
-      p.failReason = null;
-    }
+
+    if (next !== 'pass') clearCompleted();
   } else {
     const done = value === 'done';
     history = record(history, now, 'Completed', p.completedAt, done ? now : null);
     p.completedAt = done ? now : null;
     p.completedBy = done ? completedBy : null;
   }
+
+  // Deliberately after the gate change, and shared by all three branches.
+  //
+  // The old activate branch asked `p.testStatus === null`, which also refused
+  // to clear the reason when the test had PASSED. So: fail a job, pass the
+  // test, then set activate back to Yes, and the job showed as Tested while
+  // still carrying "Wiring damaged" — which then went to the office in the
+  // export next to STATUS: Completed.
+  clearReasonIfResolved();
 
   p.updatedAt = now;
   return { progress: p, history };

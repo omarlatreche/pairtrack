@@ -120,14 +120,22 @@ export function findJob(jobId: string): Job | null {
 // --- Mutations --------------------------------------------------------------
 
 export function updateJob(jobId: string, update: (job: Job) => Job): void {
-  commit((vault) => ({
-    ...vault,
-    packs: vault.packs.map((pack) =>
-      pack.id !== (vault.activePackId ?? pack.id)
-        ? pack
-        : { ...pack, jobs: pack.jobs.map((job) => (job.id === jobId ? update(job) : job)) },
-    ),
-  }));
+  commit((vault) => {
+    // `pack.id !== (vault.activePackId ?? pack.id)` is false for EVERY pack
+    // when activePackId is null, so the update would apply to all of them —
+    // and job ids are derived from the job number, so the same job in last
+    // week's pack would be marked too. Refuse instead.
+    if (vault.activePackId === null) return vault;
+
+    return {
+      ...vault,
+      packs: vault.packs.map((pack) =>
+        pack.id !== vault.activePackId
+          ? pack
+          : { ...pack, jobs: pack.jobs.map((job) => (job.id === jobId ? update(job) : job)) },
+      ),
+    };
+  });
 }
 
 export function updateSettings(update: (current: Settings) => Settings): void {

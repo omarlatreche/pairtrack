@@ -9,12 +9,7 @@ import { MAX_IDLE_MINUTES, MIN_IDLE_MINUTES } from '../../crypto/autolock';
 import { assessPassphrase, MIN_PASSPHRASE_LENGTH } from '../../crypto/passphrase';
 import { adoptKey, lock, rederiveForNewPassphrase } from '../../crypto/vault';
 import { slugifyReason } from '../../data/failReasons';
-import {
-  flushSave,
-  saveMeta,
-  saveVault,
-  wipeEverything,
-} from '../../data/repository';
+import { flushSave, migrate, saveVaultAndMeta, wipeEverything } from '../../data/repository';
 import { parseBackup, restoreBackup } from '../../export/backup';
 import { commit, getState, setState, updateSettings, type AppState } from '../../state/store';
 import { formatStamp } from '../components/format';
@@ -48,14 +43,19 @@ export function SettingsScreen({ state }: { state: AppState }) {
     setBusy('Changing passphrase');
     setError(null);
     try {
-      // Re-derive, re-encrypt with the new key, then persist the new meta.
-      // If the re-encrypt fails the old meta is untouched and he keeps access.
+      // The blob and the verifier must land in ONE transaction. Written
+      // separately, a crash in between leaves data encrypted under the new key
+      // beside a verifier for the old passphrase — and then NEITHER passphrase
+      // opens it, with no reset and no way for the app to explain why.
       const { meta, key } = await rederiveForNewPassphrase(newPass);
       const current = getState().vault;
       if (current === null) throw new Error('Locked');
 
-      await saveVault(current, key);
-      await saveMeta(meta);
+      // Anything still sitting in the debounce belongs to the old key; get it
+      // written before the key changes underneath it.
+      await flushSave();
+
+      await saveVaultAndMeta(current, key, meta);
       adoptKey(key);
 
       setNewPass('');
@@ -93,9 +93,11 @@ export function SettingsScreen({ state }: { state: AppState }) {
       const parsed = parseBackup(restoreText);
       const restored = await restoreBackup(parsed, restorePass);
 
-      // Replace in-memory state and write it through under the CURRENT key, so
-      // the restored data is readable with the passphrase he uses on this phone.
-      commit(() => restored);
+      // Through migrate() first: a backup from an older build can be missing
+      // fields the UI renders unconditionally, and a crash on the next render
+      // is a poor reward for restoring a backup. Then write it through under
+      // the CURRENT device key, so it opens with the passphrase he uses here.
+      commit(() => migrate(restored));
       await flushSave();
 
       setRestoreText(null);
@@ -217,7 +219,18 @@ export function SettingsScreen({ state }: { state: AppState }) {
           </p>
         </label>
 
-        <button type="button" class="button" onClick={() => lock()}>
+        {/* Flush first, exactly like the header lock button. Locking with a
+            change still in the debounce window would drop it: the write lands
+            after the key is gone and fails. */}
+        <button
+          type="button"
+          class="button"
+          onClick={() => {
+            void flushSave()
+              .catch(() => undefined)
+              .finally(() => lock());
+          }}
+        >
           <LockIcon size={20} />
           Lock now
         </button>

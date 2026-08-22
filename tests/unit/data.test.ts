@@ -394,3 +394,77 @@ describe('grouping', () => {
     expect(groups[0]?.total).toBe(442);
   });
 });
+
+/**
+ * Regressions from review of the detail screen's segmented controls. The list
+ * buttons (passGate/failGate) were always correct; setGate was not.
+ */
+describe('setGate — regressions', () => {
+  it('clears the fail reason once no gate is failed any more', () => {
+    let job = makeJob();
+
+    // Fail at activation, with a reason.
+    const failed = failGate(job, NOW, 'wiring-damaged');
+    job = { ...job, progress: failed.progress, history: failed.history };
+    expect(job.progress.failReason).toBe('wiring-damaged');
+
+    // Pass the test gate. The reason must stay — activation is still failed.
+    const tested = setGate(job, 'test', 'pass', NOW, null);
+    job = { ...job, progress: tested.progress, history: tested.history };
+    expect(job.progress.failReason).toBe('wiring-damaged');
+
+    // Now set activation to Yes. Nothing is failed, so the reason must go —
+    // it used to survive, and went to the office in the export next to
+    // "STATUS: Completed".
+    const activated = setGate(job, 'activate', 'yes', NOW, null);
+    expect(activated.progress.failReason).toBeNull();
+    expect(deriveStatus(activated.progress)).toBe('tested');
+  });
+
+  it('clearing activation clears the gates that followed it', () => {
+    let job = makeJob();
+    for (let i = 0; i < 3; i += 1) {
+      const change = passGate(job, NOW, 'Engineer');
+      job = { ...job, progress: change.progress, history: change.history };
+    }
+    expect(deriveStatus(job.progress)).toBe('completed');
+
+    // A job cannot be "not activated, test passed, completed".
+    const cleared = setGate(job, 'activate', null, NOW, null);
+    expect(cleared.progress.readyToActivate).toBeNull();
+    expect(cleared.progress.activatedAt).toBeNull();
+    expect(cleared.progress.testStatus).toBeNull();
+    expect(cleared.progress.testedAt).toBeNull();
+    expect(cleared.progress.completedAt).toBeNull();
+    expect(deriveStatus(cleared.progress)).toBe('outstanding');
+  });
+
+  it('failing the test gate on a completed job clears the completion', () => {
+    let job = makeJob();
+    for (let i = 0; i < 3; i += 1) {
+      const change = passGate(job, NOW, 'Engineer');
+      job = { ...job, progress: change.progress, history: change.history };
+    }
+
+    // Otherwise the export reads "TEST STATUS: Fail" beside a completion
+    // timestamp, with STATUS: Failed — three columns disagreeing.
+    const failedTest = setGate(job, 'test', 'fail', NOW, null);
+    expect(failedTest.progress.completedAt).toBeNull();
+    expect(failedTest.progress.completedBy).toBeNull();
+    expect(deriveStatus(failedTest.progress)).toBe('failed');
+  });
+
+  it('a completed job never exports a timestamp that contradicts its status', () => {
+    let job = makeJob();
+    const activated = setGate(job, 'activate', 'yes', NOW, null);
+    job = { ...job, progress: activated.progress, history: activated.history };
+    const done = setGate(job, 'complete', 'done', NOW, 'Engineer');
+    job = { ...job, progress: done.progress, history: done.history };
+
+    // Completion without a test result is allowed (he may not have tested),
+    // but the status must agree with the timestamps that are set.
+    expect(deriveStatus(job.progress)).toBe('completed');
+    expect(job.progress.completedAt).toBe(NOW);
+    expect(job.progress.activatedAt).toBe(NOW);
+  });
+});

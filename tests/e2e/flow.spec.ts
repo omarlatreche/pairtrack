@@ -333,9 +333,10 @@ test('a malformed row is flagged and correctable in the app', async ({ page }) =
   await page.locator('.card', { hasText: 'Unplaced' }).first().locator('.card__body').click();
   await expect(page.getByText('Needs attention')).toBeVisible();
 
+  // Commits as he types — no blur needed, and the field deliberately stays
+  // mounted so a half-typed value cannot unmount it mid-entry.
   const correction = page.getByLabel(/Correct MDF BAR PAIR/);
   await correction.fill('01/Z1234');
-  await correction.blur();
 
   // Corrected: it now has a real frame position and the flag is gone.
   await expect(page.locator('.tag--position')).toHaveText('01/Z1234');

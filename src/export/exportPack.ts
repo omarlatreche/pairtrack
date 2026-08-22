@@ -92,8 +92,13 @@ export async function buildXlsx(
 
   const sheet = XLSX.utils.aoa_to_sheet([headers, ...rows]);
 
-  // Force every cell to text so the office's Excel does not helpfully strip the
-  // leading 0 from a telephone number on open.
+  // Belt and braces on the leading zero of a telephone number.
+  //
+  // The real protection is that buildExportRows returns strings throughout, so
+  // aoa_to_sheet already types every cell as `s`. This loop makes that explicit
+  // and adds the text number-format. Note that `z` is dropped on write by this
+  // version of SheetJS — verified — so do not remove the string typing on the
+  // assumption that the format is what is doing the work. It is not.
   const range = XLSX.utils.decode_range(sheet['!ref'] ?? 'A1');
   for (let r = range.s.r; r <= range.e.r; r += 1) {
     for (let c = range.s.c; c <= range.e.c; c += 1) {

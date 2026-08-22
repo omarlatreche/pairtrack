@@ -96,12 +96,30 @@ export function App() {
   }, []);
 
   async function afterUnlock() {
-    const vault = await loadVault();
-    setState({
-      vault: vault ?? null,
-      screen: { name: 'list' },
-      session: { changes: 0, startedAt: Date.now() },
-    });
+    try {
+      const vault = await loadVault();
+      setState({
+        vault: vault ?? null,
+        screen: { name: 'list' },
+        error: null,
+        session: { changes: 0, startedAt: Date.now() },
+      });
+    } catch (caught) {
+      // The passphrase was RIGHT — the verifier accepted it — and the store
+      // still would not open. That means the stored blob and the stored
+      // verifier disagree, which should be impossible now the re-key is one
+      // transaction, but if it ever happens he must not be dumped back on the
+      // lock screen with no message, silently, as though he had mistyped.
+      // That is how someone concludes they have forgotten their own passphrase.
+      console.error('pairtrack: unlocked but could not read the store', caught);
+      lock();
+      setState({
+        screen: { name: 'lock' },
+        error:
+          'That passphrase was accepted, but the stored data could not be read. ' +
+          'Do not wipe. Restore your most recent .ptbak backup instead.',
+      });
+    }
   }
 
   const pack = activePack();
@@ -145,7 +163,11 @@ export function App() {
             <div class="spinner" />
           </div>
         ) : (
-          <LockScreen meta={meta} onUnlocked={() => void afterUnlock()} />
+          <LockScreen
+            meta={meta}
+            fatalError={state.error}
+            onUnlocked={() => void afterUnlock()}
+          />
         )}
       </div>
     );

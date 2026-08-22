@@ -13,6 +13,27 @@
  */
 import { lock } from './vault';
 
+/**
+ * Called just before an automatic lock, so the storage layer can write out
+ * anything still in its debounce window.
+ *
+ * Injected rather than imported: `src/crypto/` must not depend on `src/data/`
+ * (BRIEF §10.1) so it stays reviewable in isolation. `main.tsx` wires the real
+ * flush in at startup.
+ */
+let beforeLock: () => Promise<void> = async () => undefined;
+
+export function setBeforeAutoLock(handler: () => Promise<void>): void {
+  beforeLock = handler;
+}
+
+/** Flush, then lock — and lock even if the flush failed. */
+function lockAfterFlush(): void {
+  void beforeLock()
+    .catch(() => undefined)
+    .finally(() => lock());
+}
+
 export const DEFAULT_IDLE_MINUTES = 15;
 export const MIN_IDLE_MINUTES = 1;
 export const MAX_IDLE_MINUTES = 60;
@@ -44,7 +65,7 @@ export function startAutoLock(idleMinutes = DEFAULT_IDLE_MINUTES): AutoLockHandl
   function armIdle() {
     clearIdle();
     if (stopped) return;
-    idleTimer = setTimeout(() => lock(), idleMs);
+    idleTimer = setTimeout(lockAfterFlush, idleMs);
   }
 
   function onActivity() {
@@ -57,7 +78,7 @@ export function startAutoLock(idleMinutes = DEFAULT_IDLE_MINUTES): AutoLockHandl
       // its timers are unreliable — and start the shorter grace timer instead.
       clearIdle();
       if (hiddenTimer !== null) clearTimeout(hiddenTimer);
-      hiddenTimer = setTimeout(() => lock(), HIDDEN_GRACE_MS);
+      hiddenTimer = setTimeout(lockAfterFlush, HIDDEN_GRACE_MS);
     } else {
       if (hiddenTimer !== null) clearTimeout(hiddenTimer);
       hiddenTimer = null;

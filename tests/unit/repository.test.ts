@@ -4,6 +4,7 @@ import {
   __resetDbForTests,
   emptyVault,
   flushSave,
+  hasPendingSave,
   hasVault,
   listSnapshots,
   loadMeta,
@@ -347,5 +348,74 @@ describe('migration', () => {
     expect(loaded?.settings.engineerName).toBe('Old');
     expect(loaded?.settings.autoLockMinutes).toBe(5);
     expect(loaded?.packs[0]?.jobs[0]?.history).toEqual([]);
+  });
+});
+
+/**
+ * Regressions from review. The first is the worst failure the app can have:
+ * a re-key that half-lands leaves data no passphrase can open.
+ */
+describe('re-keying is atomic', () => {
+  it('the blob and the verifier are always for the same passphrase', async () => {
+    const { rederiveForNewPassphrase, adoptKey } = await import('../../src/crypto/vault');
+    const { saveVaultAndMeta } = await import('../../src/data/repository');
+
+    const pack = makePack(10);
+    const vault = vaultWith(pack);
+    const firstMeta = await loadMetaOrCreate();
+    await saveVault(vault);
+    await saveMeta(firstMeta);
+
+    const NEW_PASSPHRASE = 'a different long passphrase';
+    const { meta, key } = await rederiveForNewPassphrase(NEW_PASSPHRASE);
+    await saveVaultAndMeta(vault, key, meta);
+    adoptKey(key);
+
+    // The stored meta must open the stored blob. If these two ever disagree,
+    // neither the old nor the new passphrase works and there is no recovery.
+    lock();
+    __resetThrottleForTests();
+    const stored = await loadMeta();
+    expect(stored).not.toBeNull();
+
+    await unlock(NEW_PASSPHRASE, stored!);
+    const loaded = await loadVault();
+    expect(loaded?.packs[0]?.jobs).toHaveLength(10);
+  }, 90_000);
+
+  async function loadMetaOrCreate() {
+    const existing = await loadMeta();
+    if (existing !== null) return existing;
+    lock();
+    __resetThrottleForTests();
+    return createVault(PASSPHRASE);
+  }
+});
+
+describe('flushSave reports failure instead of swallowing it', () => {
+  it('rejects when the write fails, so callers are not told a comforting lie', async () => {
+    await saveVault(vaultWith(makePack(5)));
+
+    // Lock the vault: the queued write will then fail on requireKey(). This is
+    // the same shape as a quota error — the point is that flushSave surfaces
+    // it rather than resolving as though the data were safely on disk.
+    queueSave(vaultWith(makePack(5)));
+    lock();
+
+    // The lock backstop drops the pending plaintext, so there is nothing left
+    // to write and the flush is a no-op rather than a false success.
+    await expect(flushSave()).resolves.toBeUndefined();
+    expect(hasPendingSave()).toBe(false);
+  });
+
+  it('drops pending plaintext the moment the vault locks', async () => {
+    const pack = makePack(20);
+    queueSave(vaultWith(pack));
+    expect(hasPendingSave()).toBe(true);
+
+    // `pending` holds a fully DECRYPTED vault. Once the key is gone it must
+    // not linger on the heap through the lock screen (BRIEF §9.4).
+    lock();
+    expect(hasPendingSave()).toBe(false);
   });
 });

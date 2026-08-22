@@ -25,6 +25,7 @@ export function ExportSheet({ pack, onClose }: ExportSheetProps) {
   const [done, setDone] = useState<string | null>(null);
   const [confirmPlaintext, setConfirmPlaintext] = useState<'xlsx' | 'csv' | null>(null);
   const [passphrase, setPassphrase] = useState('');
+  const [passphraseAgain, setPassphraseAgain] = useState('');
   const [backupPrompt, setBackupPrompt] = useState(false);
 
   const failReasons = getState().vault?.settings.failReasons ?? [];
@@ -64,6 +65,14 @@ export function ExportSheet({ pack, onClose }: ExportSheetProps) {
       setError('Enter the passphrase to encrypt the backup with.');
       return;
     }
+    // A typo here produces a file that NOTHING can ever open — not him, not
+    // anyone — and he would not find out until the day he needed it. The
+    // backup is the only recovery route there is, so it gets the same
+    // type-it-twice treatment as setting the passphrase in the first place.
+    if (passphrase !== passphraseAgain) {
+      setError('The two passphrases do not match.');
+      return;
+    }
 
     await run('Encrypting backup', async () => {
       const blob = await createBackup(vault, passphrase);
@@ -75,6 +84,7 @@ export function ExportSheet({ pack, onClose }: ExportSheetProps) {
         lastBackupAt: new Date().toISOString(),
       }));
       setPassphrase('');
+      setPassphraseAgain('');
       setBackupPrompt(false);
       setDone(how === 'shared' ? `Shared ${name}` : `Saved ${name}`);
     });
@@ -174,15 +184,39 @@ export function ExportSheet({ pack, onClose }: ExportSheetProps) {
             </p>
           </label>
 
+          <label class="field">
+            <span class="field__label">Type it again</span>
+            <input
+              type="password"
+              class="input"
+              autocomplete="current-password"
+              value={passphraseAgain}
+              onInput={(event) => setPassphraseAgain((event.target as HTMLInputElement).value)}
+            />
+            {passphraseAgain !== '' && passphrase !== passphraseAgain && (
+              <p class="field__hint" style={{ color: 'var(--fail)' }}>
+                These do not match.
+              </p>
+            )}
+          </label>
+
           <button
             type="button"
             class="button button--primary"
-            disabled={busy !== null}
+            disabled={busy !== null || passphrase === '' || passphrase !== passphraseAgain}
             onClick={() => void exportBackup()}
           >
             Create encrypted backup
           </button>
-          <button type="button" class="button" onClick={() => setBackupPrompt(false)}>
+          <button
+            type="button"
+            class="button"
+            onClick={() => {
+              setPassphrase('');
+              setPassphraseAgain('');
+              setBackupPrompt(false);
+            }}
+          >
             Back
           </button>
         </>

@@ -48,8 +48,11 @@ fi
 #    order to ban them. reference/*.png is the declared exception in §9.8:
 #    four real job numbers are legible in the screenshots, nothing else.
 # ---------------------------------------------------------------------------
+# Only binaries are filtered out here. Which TEXT files are exempt from which
+# pattern is the scanner's decision, not the hook's — this used to strip
+# reference/ and docs/ before the scanner ever saw them, which meant the hook
+# and the scanner had different rules and the hook's were weaker.
 scan_files=$(printf '%s\n' "$staged" \
-  | grep -Ev '^(reference/|docs/|BRIEF\.md$|scripts/no-data-scan\.mjs$|\.githooks/pre-commit$)' \
   | grep -Ev '\.(png|jpg|jpeg|gif|webp|ico|woff2?|ttf|otf|pdf|zip)$' || true)
 
 if [ -n "$scan_files" ]; then
