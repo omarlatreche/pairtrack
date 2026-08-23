@@ -80,6 +80,53 @@ if (sawPhone > 0) {
   problems.push(`${sawPhone} line(s) in history contain a customer telephone number`);
 }
 
+// --- 3. Reference-SHAPED strings that are not on the fabricated allowlist ----
+//
+// This scan used to check only spreadsheets, backups and telephone numbers, and
+// an external review was right that the gap mattered: two REAL job numbers sat
+// in history behind fabricated prefixes (`ABC123/4`, where 144 was real and
+// scripts/no-data-scan.mjs documents that the real prefixes are ZSF/ZSG/ZSD).
+// Nothing reported them, because a rewritten history is exactly where the
+// tree scan cannot look.
+//
+// A denylist of real values is impossible here — writing them down is the thing
+// being prevented. So this is an ALLOWLIST: every reference-shaped string that
+// may legitimately appear anywhere in history, all of them invented. Anything
+// else shaped like a job reference or a bar pair fails the scan.
+//
+// Adding to this list is how you declare a new fabricated example. Do it
+// knowingly: the whole point is that the list is short enough to eyeball.
+const ALLOWED_FABRICATED = new Set([
+  // job references (AAA###/#)
+  'ABC123/4', 'ABC456/7', 'QQA123/4', 'qqa123/4', 'AAA123/4', 'ZZZ999/9',
+  // bar pairs (##/A###)
+  '01/U9001', '01/N9002', '01/A100', '01/B10', '01/A1', '01/B1', '09/INTL0021',
+  // the natural-sort ordering test in tests/unit/data.test.ts
+  '01/A9', '01/B2', '09/INTL5',
+]);
+
+const SHAPED = [
+  { name: 'job reference', re: /\b[A-Za-z]{2,4}\d{3,4}\/\d\b/g },
+  { name: 'MDF bar pair', re: /\b0[19]\/(?:[A-Wa-w]|INTL)\d{1,4}\b/g },
+];
+
+const unknown = new Map();
+for (const line of patch.split('\n')) {
+  if (!line.startsWith('+')) continue;
+  for (const { name, re } of SHAPED) {
+    for (const match of line.match(re) ?? []) {
+      if (ALLOWED_FABRICATED.has(match)) continue;
+      if (!unknown.has(match)) unknown.set(match, name);
+    }
+  }
+}
+for (const [value, name] of unknown) {
+  problems.push(
+    `history contains an unrecognised ${name}: "${value}" — ` +
+      'if it is invented, add it to ALLOWED_FABRICATED in this file',
+  );
+}
+
 if (problems.length > 0) {
   console.error(`\n${RED}history scan FAILED${RESET}\n`);
   for (const problem of problems) console.error(`    ${problem}`);
@@ -98,4 +145,4 @@ if (problems.length > 0) {
   process.exit(1);
 }
 
-console.log(`${GREEN}history scan passed${RESET} — no spreadsheet, backup or telephone number in any commit`);
+console.log(`${GREEN}history scan passed${RESET} — no spreadsheet, backup, telephone number or unrecognised job reference in any commit`);
