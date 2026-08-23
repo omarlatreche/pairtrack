@@ -84,8 +84,9 @@ if (sawPhone > 0) {
 //
 // This scan used to check only spreadsheets, backups and telephone numbers, and
 // an external review was right that the gap mattered: two REAL job numbers sat
-// in history behind fabricated prefixes (`ABC123/4`, where 144 was real and
-// scripts/no-data-scan.mjs documents that the real prefixes are ZSF/ZSG/ZSD).
+// in history behind fabricated prefixes — the prefix invented, the number not —
+// while scripts/no-data-scan.mjs documents the real prefixes, so the pair of
+// files reconstructed the reference between them.
 // Nothing reported them, because a rewritten history is exactly where the
 // tree scan cannot look.
 //
