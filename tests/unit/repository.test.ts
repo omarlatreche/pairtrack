@@ -18,7 +18,7 @@ import {
 import { createVault, lock, unlock, __resetThrottleForTests } from '../../src/crypto/vault';
 import { buildJobs } from '../../src/import/buildJobs';
 import { detectRoles } from '../../src/import/columns';
-import { passGate } from '../../src/data/transitions';
+import { toggleDone } from '../../src/data/transitions';
 import type { Pack, Vault } from '../../src/data/types';
 import { SCHEMA_VERSION } from '../../src/data/types';
 import { syntheticHeaders, syntheticRows } from './fixtures/syntheticPack';
@@ -117,15 +117,15 @@ describe('encrypted store', () => {
   it('preserves progress and history through a save/load cycle', async () => {
     const pack = makePack(10);
     const job = pack.jobs[0]!;
-    const change = passGate(job, NOW, 'Test Engineer');
-    pack.jobs[0] = { ...job, progress: change.progress, history: change.history };
+    const change = toggleDone(job, NOW, 'Test Engineer');
+    pack.jobs[0] = { ...job, progress: change.progress, history: [] };
 
     await saveVault(vaultWith(pack));
     const loaded = await loadVault();
 
-    expect(loaded?.packs[0]?.jobs[0]?.progress.readyToActivate).toBe('yes');
-    expect(loaded?.packs[0]?.jobs[0]?.progress.activatedAt).toBe(NOW);
-    expect(loaded?.packs[0]?.jobs[0]?.history).toHaveLength(1);
+    expect(loaded?.packs[0]?.jobs[0]?.progress.doneAt).toBe(NOW);
+    expect(loaded?.packs[0]?.jobs[0]?.progress.completedBy).toBe('Test Engineer');
+    expect(loaded?.packs[0]?.jobs[0]?.history).toHaveLength(0);
   });
 
   it('returns null when nothing has been saved', async () => {
@@ -145,11 +145,13 @@ describe('encrypted store', () => {
  * data. The test reads the raw stored records and asserts no plaintext.
  */
 describe('nothing readable is written to IndexedDB', () => {
-  it('stores no job number, circuit number or note in the clear', async () => {
+  it('stores no job number, circuit number or engineer name in the clear', async () => {
     const pack = makePack(30);
     const job = pack.jobs[0]!;
+    // Notes are gone (D17), so the canary rides on the one free-text field
+    // left: the engineer's name, written on every job he ticks.
     const secretNote = 'JUMPER-MISSING-CANARY-STRING';
-    pack.jobs[0] = { ...job, progress: { ...job.progress, notes: secretNote } };
+    pack.jobs[0] = { ...job, progress: { ...job.progress, completedBy: secretNote } };
 
     const jobNumber = job.jobNumber;
     const circuit = job.source.Circuit!;
@@ -344,7 +346,6 @@ describe('migration', () => {
 
     expect(loaded?.settings.view).toBeDefined();
     expect(loaded?.settings.view.sortField).toBe('framePosition');
-    expect(loaded?.settings.failReasons.length).toBeGreaterThan(0);
     expect(loaded?.settings.engineerName).toBe('Old');
     expect(loaded?.settings.autoLockMinutes).toBe(5);
     expect(loaded?.packs[0]?.jobs[0]?.history).toEqual([]);

@@ -1,160 +1,114 @@
 /**
- * The job card — BRIEF §7.3.
+ * The job card — BRIEF §7.3, rewritten for D17.
  *
- * The single biggest improvement over the current tool: a 15-column table on a
- * 6" screen is 22 seconds of horizontal scrolling to reach the one control that
- * matters. This shows the five things he needs and the two buttons he presses.
+ * The engineer used the previous version and said it was too complicated: he
+ * should not have to click a job to see its details, should not have to click
+ * jobs at all, and wants every field on the front screen. So:
  *
- * Information priority, top to bottom, is the brief's and not negotiable:
- *   1. job number, large, tabular — matched against paperwork and the frame
- *   2. frame position — what he navigates by
- *   3. the actual move, old -> new
- *   4. job type badge — tells him how long it takes before he walks to it
- *   5. status chip — colour AND text AND icon, never colour alone
+ *   - the whole card is one tap target, and the tap means DONE
+ *   - there is nothing to open, and no second screen to open it into
+ *   - every per-row field the pack carries is on the card
+ *
+ * Information priority is his, not the brief's. He said JOB is the identifier
+ * he works from, so JOB leads and the job number sits under it as the reference
+ * he quotes to the office. (JOB is a row index and is NOT the key the app
+ * matches on — see D17.)
+ *
+ * `DB` and `New_Equipment` are deliberately absent: both are constant across
+ * the whole pack, so repeating them 442 times tells him nothing. They are shown
+ * once in the pack header instead.
  */
 import { formatBarPair } from '../../data/barPair';
-import { failReasonLabel } from '../../data/failReasons';
-import { currentGate, deriveStatus, GATE_LABELS, STATUS_LABELS } from '../../data/transitions';
-import type { FailReason, Job } from '../../data/types';
+import { deriveStatus, STATUS_LABELS } from '../../data/transitions';
+import type { Job } from '../../data/types';
 import { JOB_TYPE_LABELS } from '../../data/view';
 import { formatStampSmart } from './format';
-import { CrossIcon, DotIcon, LockIcon, TickIcon, WarnIcon } from './Icons';
+import { DotIcon, TickIcon, WarnIcon } from './Icons';
 
 interface JobCardProps {
   readonly job: Job;
-  /** Column headers for the two equipment values and the tie references. */
+  /** Headers for the per-row source values worth showing. */
   readonly columns: {
+    readonly circuit: string | null;
     readonly oldEquipment: string | null;
-    readonly newEquipment: string | null;
     readonly esideTies: string | null;
     readonly dsideTies: string | null;
   };
-  readonly failReasons: FailReason[];
-  readonly onOpen: (jobId: string) => void;
-  readonly onPass: (jobId: string) => void;
-  readonly onFail: (jobId: string) => void;
+  readonly onToggleDone: (jobId: string) => void;
 }
 
 const STATUS_ICON = {
   outstanding: DotIcon,
-  activated: DotIcon,
-  tested: DotIcon,
-  completed: TickIcon,
-  failed: CrossIcon,
+  pending: TickIcon,
+  'signed-off': TickIcon,
 } as const;
 
-export function JobCard({ job, columns, failReasons, onOpen, onPass, onFail }: JobCardProps) {
+export function JobCard({ job, columns, onToggleDone }: JobCardProps) {
   const status = deriveStatus(job.progress);
-  const gate = currentGate(job.progress);
   const StatusIcon = STATUS_ICON[status];
 
+  const circuit = columns.circuit ? job.source[columns.circuit] : '';
   const oldEquipment = columns.oldEquipment ? job.source[columns.oldEquipment] : '';
-  const newEquipment = columns.newEquipment ? job.source[columns.newEquipment] : '';
   const eside = columns.esideTies ? job.source[columns.esideTies] : '';
   const dside = columns.dsideTies ? job.source[columns.dsideTies] : '';
 
-  // Only the 222 jobs that have ties show the tie row; on the other 217 it
-  // would be an empty line of noise.
+  // Only the jobs that have ties show the tie row; on the rest it would be an
+  // empty line of noise.
   const hasTies = (eside ?? '') !== '' || (dside ?? '') !== '';
 
-  const locked = job.progress.locked;
-  const complete = gate === null;
-
-  const gateHint = gate === null ? 'Done' : GATE_LABELS[gate];
+  const done = job.progress.doneAt !== null;
 
   return (
-    <article class={`card card--${status}${locked ? ' card--locked' : ''}`}>
-      <button
-        type="button"
-        class="card__body"
-        onClick={() => onOpen(job.id)}
-        aria-label={`Open job ${job.jobNumber}, ${STATUS_LABELS[status]}`}
-      >
-        <span class="card__number">{job.jobNumber}</span>
-
-        <div class="card__chips">
-          <span class="tag tag--position">{formatBarPair(job.barPair)}</span>
-
-          <span class={`tag tag--type-${job.jobType}`}>{JOB_TYPE_LABELS[job.jobType]}</span>
-
-          <span class={`status status--${status}`}>
-            <StatusIcon size={13} />
-            {STATUS_LABELS[status]}
-          </span>
-
-          {locked && (
-            <span class="tag">
-              <LockIcon size={12} />
-              Locked
-            </span>
-          )}
-
-          {job.defects.length > 0 && (
-            <span class="tag tag--attention">
-              <WarnIcon size={12} />
-              Needs attention
-            </span>
-          )}
-
-          {job.missingSince != null && <span class="tag tag--missing">Not in latest pack</span>}
-        </div>
-
-        {(oldEquipment || newEquipment) && (
-          <div class="card__move">
-            <strong>{oldEquipment || '—'}</strong>
-            <span aria-hidden="true">→</span>
-            <strong>{newEquipment || '—'}</strong>
-          </div>
-        )}
-
-        {hasTies && (
-          <div class="card__ties">
-            {eside ? `E ${eside}` : ''}
-            {eside && dside ? '  ·  ' : ''}
-            {dside ? `D ${dside}` : ''}
-          </div>
-        )}
-
-        {job.progress.failReason !== null && (
-          <div class="card__reason">{failReasonLabel(failReasons, job.progress.failReason)}</div>
-        )}
-
-        {job.progress.notes.trim() !== '' && <div class="card__notes">{job.progress.notes}</div>}
-
-        {status !== 'outstanding' && (
-          <div class="card__ties">
-            {formatStampSmart(
-              job.progress.completedAt ?? job.progress.testedAt ?? job.progress.activatedAt,
-            )}
-          </div>
-        )}
-      </button>
-
-      <div class="card__actions">
-        <button
-          type="button"
-          class="mark mark--pass"
-          disabled={locked || complete}
-          onClick={() => onPass(job.id)}
-          aria-label={
-            complete
-              ? `${job.jobNumber} is already complete`
-              : `Pass ${gateHint} for job ${job.jobNumber}`
-          }
-        >
-          <TickIcon size={28} />
-        </button>
-
-        <button
-          type="button"
-          class="mark mark--fail"
-          disabled={locked}
-          onClick={() => onFail(job.id)}
-          aria-label={`Fail ${gateHint} for job ${job.jobNumber}`}
-        >
-          <CrossIcon size={28} />
-        </button>
+    <button
+      type="button"
+      class={`card card--${status}`}
+      // One tap, and it says what it will do rather than what the job is, so it
+      // is unambiguous in gloves and to a screen reader.
+      aria-pressed={done}
+      aria-label={`Job ${job.seq}, ${STATUS_LABELS[status]}. Tap to mark ${done ? 'not done' : 'done'}.`}
+      onClick={() => onToggleDone(job.id)}
+    >
+      <div class="card__lead">
+        <span class="card__seq">{job.seq}</span>
+        <span class={`card__status card__status--${status}`}>
+          <StatusIcon size={20} />
+          {STATUS_LABELS[status]}
+        </span>
       </div>
-    </article>
+
+      <div class="card__facts">
+        <span class="card__ref">{job.jobNumber}</span>
+        <span class="tag tag--position">{formatBarPair(job.barPair)}</span>
+        <span class={`tag tag--type-${job.jobType}`}>{JOB_TYPE_LABELS[job.jobType]}</span>
+      </div>
+
+      {circuit ? <div class="card__circuit">{circuit}</div> : null}
+
+      {oldEquipment ? <div class="card__move">From {oldEquipment}</div> : null}
+
+      {hasTies && (
+        <div class="card__ties">
+          {eside ? `E ${eside}` : ''}
+          {eside && dside ? '  ·  ' : ''}
+          {dside ? `D ${dside}` : ''}
+        </div>
+      )}
+
+      {job.defects.length > 0 && (
+        <div class="card__flags">
+          <span class="tag tag--attention">
+            <WarnIcon size={14} /> Check this row
+          </span>
+        </div>
+      )}
+
+      {job.missingSince != null && (
+        <div class="card__flags">
+          <span class="tag tag--missing">Not in latest pack</span>
+        </div>
+      )}
+
+      {done && <div class="card__when">{formatStampSmart(job.progress.doneAt)}</div>}
+    </button>
   );
 }

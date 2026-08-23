@@ -434,12 +434,20 @@ button {
 
 /* --- Job card ------------------------------------------------------------ */
 
+/*
+ * The card IS the control (D17).
+ *
+ * He asked not to have to click into jobs at all, so the whole card is one tap
+ * target and the tap means done. That makes the minimum size the card's own
+ * size, which is comfortably past the 44px tap floor even in gloves.
+ */
 .card {
-  display: grid;
-  grid-template-columns: 1fr auto;
-  gap: 10px;
+  display: block;
+  width: 100%;
   margin-bottom: 10px;
-  padding: 12px;
+  padding: 12px 14px;
+  text-align: left;
+  color: inherit;
   background: var(--bg-raised);
   border: 1px solid var(--border);
   border-left: 4px solid var(--border-strong);
@@ -449,40 +457,127 @@ button {
 .card--outstanding {
   border-left-color: var(--border-strong);
 }
-.card--activated {
+.card--pending {
   border-left-color: var(--accent);
+  background: color-mix(in srgb, var(--accent) 7%, var(--bg-raised));
 }
-.card--tested {
-  border-left-color: var(--info);
-}
-.card--completed {
+.card--signed-off {
   border-left-color: var(--pass);
-}
-.card--failed {
-  border-left-color: var(--fail);
+  background: color-mix(in srgb, var(--pass) 7%, var(--bg-raised));
 }
 
-.card--locked {
-  opacity: 0.72;
+.card__lead {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 10px;
 }
 
-.card__body {
-  min-width: 0;
-  text-align: left;
-  background: none;
-  padding: 0;
-  color: inherit;
-}
-
-/* The thing he matches against paperwork and against the frame. */
-.card__number {
-  display: block;
+/* JOB — the identifier he actually works from. Biggest thing on the card. */
+.card__seq {
   font-family: var(--font-mono);
-  font-size: 22px;
+  font-size: 30px;
   font-weight: 700;
   font-variant-numeric: tabular-nums;
-  letter-spacing: -0.01em;
-  word-break: break-all;
+  line-height: 1.1;
+}
+
+.card__status {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 13px;
+  font-weight: 600;
+  white-space: nowrap;
+}
+.card__status--outstanding {
+  color: var(--text-dim);
+}
+.card__status--pending {
+  color: var(--accent);
+}
+.card__status--signed-off {
+  color: var(--pass);
+}
+
+.card__facts {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  margin-top: 6px;
+}
+
+/* The reference he quotes to the office, secondary to JOB. */
+.card__ref {
+  font-family: var(--font-mono);
+  font-size: 14px;
+  color: var(--text-dim);
+}
+
+.card__circuit,
+.card__move,
+.card__ties {
+  margin-top: 4px;
+  font-family: var(--font-mono);
+  font-size: 13px;
+  color: var(--text-dim);
+  word-break: break-word;
+}
+
+.card__circuit {
+  font-size: 15px;
+  color: var(--text);
+}
+
+.card__when {
+  margin-top: 6px;
+  font-size: 12px;
+  color: var(--text-faint);
+}
+
+.card__flags {
+  margin-top: 6px;
+}
+
+/*
+ * The pending pile and its one batch action.
+ *
+ * The old tool had Test Submit / Completed Submit and a pending tracker; this
+ * is the same idea with one button instead of three (D17).
+ */
+.signoff {
+  /*
+   * Fixed above the dock, stacked clear of the undo toast.
+   *
+   * It was sticky-to-top first, which put it underneath the fixed header: in
+   * the DOM, reported visible, and invisible to the person using it. The toast
+   * already proved this pattern in this app, so it reuses the same anchor and
+   * simply sits one row higher so the two never overlap.
+   */
+  position: fixed;
+  left: 12px;
+  right: 12px;
+  bottom: calc(var(--dock-height) + env(safe-area-inset-bottom) + 78px);
+  z-index: 45;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 10px 12px;
+  background: color-mix(in srgb, var(--accent) 16%, var(--bg-sunken));
+  border: 1px solid var(--accent);
+  border-radius: var(--radius);
+}
+
+.signoff__count {
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.signoff__button {
+  min-height: var(--tap);
+  white-space: nowrap;
 }
 
 .card__chips {

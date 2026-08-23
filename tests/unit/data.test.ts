@@ -7,15 +7,12 @@ import { describe, expect, it } from 'vitest';
 import { compareBarPair, blockKey, formatBarPair, parseBarPair } from '../../src/data/barPair';
 import { naturalCompare, normaliseForSearch } from '../../src/data/naturalSort';
 import {
-  currentGate,
   deriveStatus,
   emptyProgress,
-  failGate,
   hasProgress,
-  isLegalTransition,
-  passGate,
-  revertGate,
-  setGate,
+  signOff,
+  STATUS_RANK,
+  toggleDone,
 } from '../../src/data/transitions';
 import { countJobs, matchesSearch, oldShelfOf, sortJobs, applyView, groupJobs } from '../../src/data/view';
 import { DEFAULT_VIEW, type Job } from '../../src/data/types';
@@ -23,6 +20,7 @@ import { buildJobs } from '../../src/import/buildJobs';
 import { detectRoles } from '../../src/import/columns';
 import { syntheticHeaders, syntheticRows } from './fixtures/syntheticPack';
 
+const LATER = '2026-08-22T11:00:00.000Z';
 const NOW = '2026-08-22T10:33:00.000Z';
 
 function makeJob(overrides: Partial<Job> = {}): Job {
@@ -142,132 +140,74 @@ describe('frame walk order', () => {
   });
 });
 
-describe('status transitions', () => {
-  it('starts outstanding', () => {
+describe('done / not done — D17', () => {
+  it('starts not done', () => {
     expect(deriveStatus(emptyProgress(NOW))).toBe('outstanding');
-    expect(currentGate(emptyProgress(NOW))).toBe('activate');
   });
 
-  it('walks outstanding -> activated -> tested -> completed', () => {
-    let job = makeJob();
-
-    let change = passGate(job, NOW, 'Engineer');
-    job = { ...job, progress: change.progress, history: change.history };
-    expect(deriveStatus(job.progress)).toBe('activated');
-    expect(job.progress.activatedAt).toBe(NOW);
-
-    change = passGate(job, NOW, 'Engineer');
-    job = { ...job, progress: change.progress, history: change.history };
-    expect(deriveStatus(job.progress)).toBe('tested');
-    expect(job.progress.testedAt).toBe(NOW);
-
-    change = passGate(job, NOW, 'Engineer');
-    job = { ...job, progress: change.progress, history: change.history };
-    expect(deriveStatus(job.progress)).toBe('completed');
-    expect(job.progress.completedAt).toBe(NOW);
-    expect(job.progress.completedBy).toBe('Engineer');
-
-    // Nothing left to advance.
-    expect(currentGate(job.progress)).toBeNull();
-  });
-
-  it('fails at the first gate and records the reason code', () => {
+  it('one tap marks it done and stamps the time he tapped', () => {
     const job = makeJob();
-    const change = failGate(job, NOW, 'pair-already-in-use');
-    expect(deriveStatus(change.progress)).toBe('failed');
-    expect(change.progress.readyToActivate).toBe('failed');
-    expect(change.progress.failReason).toBe('pair-already-in-use');
-    // A failed activation has no activation timestamp.
-    expect(change.progress.activatedAt).toBeNull();
+    const change = toggleDone(job, NOW, 'Engineer');
+
+    expect(deriveStatus(change.progress)).toBe('pending');
+    expect(change.progress.doneAt).toBe(NOW);
+    expect(change.progress.completedBy).toBe('Engineer');
+    expect(change.progress.signedOffAt).toBeNull();
   });
 
-  it('fails at the test gate once activated', () => {
+  it('tapping again undoes it completely', () => {
     let job = makeJob();
-    const activated = passGate(job, NOW, null);
-    job = { ...job, progress: activated.progress, history: activated.history };
+    job = { ...job, progress: toggleDone(job, NOW, 'Engineer').progress };
+    const undone = toggleDone(job, LATER, 'Engineer');
 
-    const change = failGate(job, NOW, 'no-dial-tone-after-move');
-    expect(deriveStatus(change.progress)).toBe('failed');
-    expect(change.progress.testStatus).toBe('fail');
-    // The activation stands — only the test failed.
-    expect(change.progress.readyToActivate).toBe('yes');
+    expect(deriveStatus(undone.progress)).toBe('outstanding');
+    expect(undone.progress.doneAt).toBeNull();
+    expect(undone.progress.completedBy).toBeNull();
   });
 
-  it('clears the fail reason when a previously failed gate passes', () => {
-    let job = makeJob();
-    const failed = failGate(job, NOW, 'access-blocked');
-    job = { ...job, progress: failed.progress, history: failed.history };
-    expect(job.progress.failReason).toBe('access-blocked');
-
-    const passed = passGate(job, NOW, null);
-    expect(passed.progress.failReason).toBeNull();
-    expect(deriveStatus(passed.progress)).toBe('activated');
-  });
-
-  it('reverts one gate at a time, and reverting clears the timestamp', () => {
-    let job = makeJob();
-    for (let i = 0; i < 3; i += 1) {
-      const change = passGate(job, NOW, 'Engineer');
-      job = { ...job, progress: change.progress, history: change.history };
-    }
-    expect(deriveStatus(job.progress)).toBe('completed');
-
-    let change = revertGate(job, NOW);
-    job = { ...job, progress: change.progress, history: change.history };
-    expect(deriveStatus(job.progress)).toBe('tested');
-    expect(job.progress.completedAt).toBeNull();
-
-    change = revertGate(job, NOW);
-    job = { ...job, progress: change.progress, history: change.history };
-    expect(deriveStatus(job.progress)).toBe('activated');
-    expect(job.progress.testedAt).toBeNull();
-
-    change = revertGate(job, NOW);
-    job = { ...job, progress: change.progress, history: change.history };
-    expect(deriveStatus(job.progress)).toBe('outstanding');
-    expect(job.progress.activatedAt).toBeNull();
-  });
-
-  it('reverting an untouched job is a no-op', () => {
+  it('signs off a pending job as part of the batch', () => {
     const job = makeJob();
-    const change = revertGate(job, NOW);
-    expect(change.progress).toBe(job.progress);
-    expect(deriveStatus(change.progress)).toBe('outstanding');
+    const done = toggleDone(job, NOW, 'Engineer').progress;
+    const signed = signOff(done, LATER);
+
+    expect(signed).not.toBeNull();
+    expect(deriveStatus(signed!)).toBe('signed-off');
+    // The tap time survives sign-off: it is when the work actually happened,
+    // and it is the only timestamp he said matters.
+    expect(signed!.doneAt).toBe(NOW);
+    expect(signed!.signedOffAt).toBe(LATER);
   });
 
-  it('clearing a gate clears its timestamp', () => {
+  it('refuses to sign off a job he never ticked', () => {
+    expect(signOff(emptyProgress(NOW), LATER)).toBeNull();
+  });
+
+  it('signing off twice is a no-op, so a double tap cannot double-stamp', () => {
+    const done = toggleDone(makeJob(), NOW, 'Engineer').progress;
+    const first = signOff(done, LATER)!;
+    expect(signOff(first, 'later still')).toBeNull();
+  });
+
+  it('un-ticking a signed-off job clears the sign-off too', () => {
+    // Otherwise the job sits in an impossible state: signed off, but not done.
     let job = makeJob();
-    const set = setGate(job, 'activate', 'yes', NOW, null);
-    job = { ...job, progress: set.progress, history: set.history };
-    expect(job.progress.activatedAt).toBe(NOW);
+    job = { ...job, progress: toggleDone(job, NOW, 'Engineer').progress };
+    job = { ...job, progress: signOff(job.progress, LATER)! };
 
-    const cleared = setGate(job, 'activate', null, NOW, null);
-    expect(cleared.progress.readyToActivate).toBeNull();
-    expect(cleared.progress.activatedAt).toBeNull();
-  });
-
-  it('records every change in the history', () => {
-    let job = makeJob();
-    const change = passGate(job, NOW, 'Engineer');
-    job = { ...job, progress: change.progress, history: change.history };
-    expect(job.history).toHaveLength(1);
-    expect(job.history[0]).toMatchObject({ field: 'Ready to activate', from: null, to: 'yes' });
-  });
-
-  it('enforces the legal transition table', () => {
-    expect(isLegalTransition('outstanding', 'activated')).toBe(true);
-    expect(isLegalTransition('outstanding', 'failed')).toBe(true);
-    expect(isLegalTransition('outstanding', 'completed')).toBe(false);
-    expect(isLegalTransition('completed', 'outstanding')).toBe(false);
-    expect(isLegalTransition('failed', 'activated')).toBe(true);
-    expect(isLegalTransition('activated', 'activated')).toBe(true);
+    const undone = toggleDone(job, 'later still', 'Engineer');
+    expect(undone.progress.doneAt).toBeNull();
+    expect(undone.progress.signedOffAt).toBeNull();
+    expect(deriveStatus(undone.progress)).toBe('outstanding');
   });
 
   it('knows whether a job carries progress worth keeping on re-import', () => {
     expect(hasProgress(emptyProgress(NOW))).toBe(false);
-    expect(hasProgress({ ...emptyProgress(NOW), notes: 'jumper missing' })).toBe(true);
-    expect(hasProgress({ ...emptyProgress(NOW), readyToActivate: 'yes' })).toBe(true);
-    expect(hasProgress({ ...emptyProgress(NOW), locked: true })).toBe(true);
+    expect(hasProgress(toggleDone(makeJob(), NOW, null).progress)).toBe(true);
+  });
+
+  it('ranks what still needs doing first', () => {
+    expect(STATUS_RANK.outstanding).toBeLessThan(STATUS_RANK.pending);
+    expect(STATUS_RANK.pending).toBeLessThan(STATUS_RANK['signed-off']);
   });
 });
 
@@ -294,12 +234,10 @@ describe('search', () => {
     expect(matchesSearch(target, circuit.slice(1))).toBe(true);
   });
 
-  it('matches a bar pair and notes', () => {
+  it('matches a bar pair, and the JOB number he actually works from', () => {
     const target = jobs[0] as Job;
     expect(matchesSearch(target, target.source['MDF BAR PAIR'] as string)).toBe(true);
-
-    const withNote = { ...target, progress: { ...target.progress, notes: 'jumper missing', updatedAt: 'x' } };
-    expect(matchesSearch(withNote, 'jumper')).toBe(true);
+    expect(matchesSearch(target, String(target.seq))).toBe(true);
   });
 
   it('an empty query matches everything', () => {
@@ -321,8 +259,8 @@ describe('filter counts and composition', () => {
     const counts = countJobs(jobs, '');
     expect(counts.all).toBe(442);
     expect(counts.byStatus.outstanding).toBe(442);
-    expect(counts.byStatus.completed).toBe(0);
-    expect(counts.locked).toBe(0);
+    expect(counts.byStatus.pending).toBe(0);
+    expect(counts.byStatus['signed-off']).toBe(0);
   });
 
   it('counts frames and job types', () => {
@@ -335,12 +273,12 @@ describe('filter counts and composition', () => {
 
   it('composes filter, search and sort', () => {
     const marked = jobs.map((job, i) =>
-      i < 10 ? { ...job, progress: passGate(job, NOW, null).progress } : job,
+      i < 10 ? { ...job, progress: toggleDone(job, NOW, null).progress } : job,
     );
 
     const { jobs: result } = applyView(
       marked,
-      { ...DEFAULT_VIEW, status: 'activated', sortField: 'jobNumber', sortDirection: 'desc' },
+      { ...DEFAULT_VIEW, status: 'pending', sortField: 'jobNumber', sortDirection: 'desc' },
       'Old_Equipment',
     );
 
@@ -399,72 +337,3 @@ describe('grouping', () => {
  * Regressions from review of the detail screen's segmented controls. The list
  * buttons (passGate/failGate) were always correct; setGate was not.
  */
-describe('setGate — regressions', () => {
-  it('clears the fail reason once no gate is failed any more', () => {
-    let job = makeJob();
-
-    // Fail at activation, with a reason.
-    const failed = failGate(job, NOW, 'wiring-damaged');
-    job = { ...job, progress: failed.progress, history: failed.history };
-    expect(job.progress.failReason).toBe('wiring-damaged');
-
-    // Pass the test gate. The reason must stay — activation is still failed.
-    const tested = setGate(job, 'test', 'pass', NOW, null);
-    job = { ...job, progress: tested.progress, history: tested.history };
-    expect(job.progress.failReason).toBe('wiring-damaged');
-
-    // Now set activation to Yes. Nothing is failed, so the reason must go —
-    // it used to survive, and went to the office in the export next to
-    // "STATUS: Completed".
-    const activated = setGate(job, 'activate', 'yes', NOW, null);
-    expect(activated.progress.failReason).toBeNull();
-    expect(deriveStatus(activated.progress)).toBe('tested');
-  });
-
-  it('clearing activation clears the gates that followed it', () => {
-    let job = makeJob();
-    for (let i = 0; i < 3; i += 1) {
-      const change = passGate(job, NOW, 'Engineer');
-      job = { ...job, progress: change.progress, history: change.history };
-    }
-    expect(deriveStatus(job.progress)).toBe('completed');
-
-    // A job cannot be "not activated, test passed, completed".
-    const cleared = setGate(job, 'activate', null, NOW, null);
-    expect(cleared.progress.readyToActivate).toBeNull();
-    expect(cleared.progress.activatedAt).toBeNull();
-    expect(cleared.progress.testStatus).toBeNull();
-    expect(cleared.progress.testedAt).toBeNull();
-    expect(cleared.progress.completedAt).toBeNull();
-    expect(deriveStatus(cleared.progress)).toBe('outstanding');
-  });
-
-  it('failing the test gate on a completed job clears the completion', () => {
-    let job = makeJob();
-    for (let i = 0; i < 3; i += 1) {
-      const change = passGate(job, NOW, 'Engineer');
-      job = { ...job, progress: change.progress, history: change.history };
-    }
-
-    // Otherwise the export reads "TEST STATUS: Fail" beside a completion
-    // timestamp, with STATUS: Failed — three columns disagreeing.
-    const failedTest = setGate(job, 'test', 'fail', NOW, null);
-    expect(failedTest.progress.completedAt).toBeNull();
-    expect(failedTest.progress.completedBy).toBeNull();
-    expect(deriveStatus(failedTest.progress)).toBe('failed');
-  });
-
-  it('a completed job never exports a timestamp that contradicts its status', () => {
-    let job = makeJob();
-    const activated = setGate(job, 'activate', 'yes', NOW, null);
-    job = { ...job, progress: activated.progress, history: activated.history };
-    const done = setGate(job, 'complete', 'done', NOW, 'Engineer');
-    job = { ...job, progress: done.progress, history: done.history };
-
-    // Completion without a test result is allowed (he may not have tested),
-    // but the status must agree with the timestamps that are set.
-    expect(deriveStatus(job.progress)).toBe('completed');
-    expect(job.progress.completedAt).toBe(NOW);
-    expect(job.progress.activatedAt).toBe(NOW);
-  });
-});

@@ -1,7 +1,7 @@
 /**
  * Settings — BRIEF §7.1, §9.5, §9.6.
  *
- * Engineer name, auto-lock timeout, editable fail reasons, pack switching,
+ * Engineer name, auto-lock timeout, malformed-row corrections, pack switching,
  * backup/restore, passphrase change, and the confirm-by-typing wipe.
  */
 import { useState } from 'preact/hooks';
@@ -9,10 +9,11 @@ import { MAX_IDLE_MINUTES, MIN_IDLE_MINUTES } from '../../crypto/autolock';
 import { assessPassphrase, MIN_PASSPHRASE_LENGTH } from '../../crypto/passphrase';
 import { lock } from '../../crypto/vault';
 import { changePassphrase as runChangePassphrase } from '../../data/changePassphrase';
-import { slugifyReason } from '../../data/failReasons';
 import { flushSave, wipeEverything } from '../../data/repository';
 import { restoreFromBackupText } from '../../data/restore';
-import { commit, getState, setState, updateSettings, type AppState } from '../../state/store';
+import { correctSourceValue } from '../../state/actions';
+import { activePack, commit, getState, setState, updateSettings, type AppState } from '../../state/store';
+import { headerForRole } from '../../import/columns';
 import { formatStamp } from '../components/format';
 import { BackIcon, LockIcon, WarnIcon } from '../components/Icons';
 import { APP_VERSION } from '../../version';
@@ -21,7 +22,27 @@ export function SettingsScreen({ state }: { state: AppState }) {
   const vault = state.vault;
   const settings = vault?.settings;
 
-  const [newReason, setNewReason] = useState('');
+  const pack = activePack();
+  const barPairColumn = pack === null ? null : headerForRole(pack.columnMapping, 'barPair');
+  const oldEquipmentColumn = pack === null ? null : headerForRole(pack.columnMapping, 'oldEquipment');
+
+  /**
+   * One correction field per defect, pointed at the column that actually caused
+   * it. Offering a bar-pair box for a malformed equipment reference would just
+   * be a box that cannot fix the problem it sits under.
+   */
+  const corrections = (pack?.jobs ?? []).flatMap((job) =>
+    job.defects.flatMap((defect) => {
+      const column =
+        defect === 'bad-barpair'
+          ? barPairColumn
+          : defect === 'bad-old-equipment'
+            ? oldEquipmentColumn
+            : null;
+      return column === null ? [] : [{ job, column, defect }];
+    }),
+  );
+
   const [wipeConfirm, setWipeConfirm] = useState('');
   const [busy, setBusy] = useState<string | null>(null);
   const [message, setMessage] = useState<string | null>(null);
@@ -162,6 +183,41 @@ export function SettingsScreen({ state }: { state: AppState }) {
           <p class="field__hint">Filled into Completed By when you finish a job.</p>
         </label>
       </section>
+
+      {corrections.length > 0 && (
+        <section class="section">
+          <h2 class="section__title">Rows to check</h2>
+          <p class="section__hint">
+            {corrections.length === 1 ? 'One row' : `${corrections.length} rows`} arrived with a
+            value the app could not read. A row with an unreadable bar pair sorts as Unplaced
+            instead of into frame order; correcting it here puts it back in walk order.
+          </p>
+
+          {/*
+            This lives in Settings, not on the card. The engineer asked not to
+            have to click into jobs at all (D17), and correcting two rows out of
+            442 is not the job — it is a one-off repair, so it belongs off the
+            main screen entirely rather than as furniture on every card.
+          */}
+          {corrections.map(({ job, column, defect }) => (
+            <label class="field" key={`${job.id}:${defect}`}>
+              <span class="field__label">
+                Correct {column} for job {job.seq} ({job.jobNumber})
+              </span>
+              <input
+                type="text"
+                inputMode="text"
+                autocomplete="off"
+                spellcheck={false}
+                value={job.source[column] ?? ''}
+                onInput={(event) =>
+                  correctSourceValue(job.id, column, (event.target as HTMLInputElement).value)
+                }
+              />
+            </label>
+          ))}
+        </section>
+      )}
 
       <section class="section">
         <h2 class="section__title">Display</h2>
@@ -326,73 +382,6 @@ export function SettingsScreen({ state }: { state: AppState }) {
         )}
       </section>
 
-      <section class="section">
-        <h2 class="section__title">Fail reasons</h2>
-        <p class="field__hint" style={{ marginBottom: '12px' }}>
-          These are the one-tap buttons when you fail a job. Change the wording to whatever you
-          would actually write — the stored value does not change when you rename one.
-        </p>
-
-        {settings.failReasons.map((reason, index) => (
-          <div class="mapping-row" key={reason.code}>
-            <input
-              class="input"
-              value={reason.label}
-              aria-label={`Label for ${reason.code}`}
-              onInput={(event) => {
-                const label = (event.target as HTMLInputElement).value;
-                updateSettings((current) => ({
-                  ...current,
-                  failReasons: current.failReasons.map((r, i) => (i === index ? { ...r, label } : r)),
-                }));
-              }}
-            />
-            <button
-              type="button"
-              class="button"
-              style={{ minHeight: '44px' }}
-              onClick={() =>
-                updateSettings((current) => ({
-                  ...current,
-                  failReasons: current.failReasons.map((r, i) =>
-                    i === index ? { ...r, enabled: !r.enabled } : r,
-                  ),
-                }))
-              }
-            >
-              {reason.enabled ? 'Hide' : 'Show'}
-            </button>
-          </div>
-        ))}
-
-        <div class="mapping-row">
-          <input
-            class="input"
-            placeholder="Add your own reason"
-            value={newReason}
-            onInput={(event) => setNewReason((event.target as HTMLInputElement).value)}
-          />
-          <button
-            type="button"
-            class="button"
-            style={{ minHeight: '44px' }}
-            disabled={newReason.trim() === ''}
-            onClick={() => {
-              const label = newReason.trim();
-              updateSettings((current) => ({
-                ...current,
-                failReasons: [
-                  ...current.failReasons,
-                  { code: slugifyReason(label), label, enabled: true },
-                ],
-              }));
-              setNewReason('');
-            }}
-          >
-            Add
-          </button>
-        </div>
-      </section>
 
       {vault.packs.length > 0 && (
         <section class="section">

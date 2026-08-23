@@ -97,10 +97,10 @@ test('installs, then works entirely in aeroplane mode across a restart', async (
   });
 
   // --- Record 20 status changes, offline -----------------------------------
-  await page.getByRole('button', { name: /^Outstanding/ }).click();
+  await page.getByRole('button', { name: /^Not done/ }).click();
   for (let i = 0; i < 20; i += 1) {
-    await page.locator('button.mark--pass').first().click();
-    await expect(page.getByRole('button', { name: /^Outstanding/ })).toContainText(
+    await page.locator('.card').first().click();
+    await expect(page.getByRole('button', { name: /^Not done/ })).toContainText(
       String(TOTAL_JOBS - 1 - i),
     );
   }
@@ -117,13 +117,13 @@ test('installs, then works entirely in aeroplane mode across a restart', async (
   await revived.getByRole('button', { name: 'Unlock' }).click();
 
   // Not a single tick lost.
-  await expect(revived.getByRole('button', { name: /^Activated/ })).toContainText('20', {
+  await expect(revived.getByRole('button', { name: /^Done/ })).toContainText('20', {
     timeout: 60_000,
   });
   await expect(revived.getByRole('button', { name: /^All/ })).toContainText(String(TOTAL_JOBS));
 
   // Marking still works with no network.
-  await revived.locator('button.mark--pass').first().click();
+  await revived.locator('.card').first().click();
   await expect(revived.locator('.toast')).toBeVisible();
 
   await context.setOffline(false);

@@ -15,7 +15,6 @@ import { decryptJson, encryptJson, type Sealed } from '../crypto/cipher';
 import { adoptKey, onLockStateChange, requireKey } from '../crypto/vault';
 import type { VaultMeta } from '../crypto/vault';
 import { SNAPSHOT_RING_SIZE } from '../crypto/params';
-import { DEFAULT_FAIL_REASONS } from './failReasons';
 import { DEFAULT_VIEW, SCHEMA_VERSION, type Settings, type Vault } from './types';
 
 const DB_NAME = 'pairtrack';
@@ -188,7 +187,6 @@ export function emptySettings(): Settings {
     engineerName: '',
     autoLockMinutes: 15,
     theme: 'dark',
-    failReasons: DEFAULT_FAIL_REASONS.map((r) => ({ ...r })),
     view: { ...DEFAULT_VIEW },
     changesSinceBackup: 0,
     lastBackupAt: null,
@@ -436,9 +434,6 @@ export function __resetDbForTests(): void {
 export function migrate(vault: Vault): Vault {
   const settings = { ...emptySettings(), ...vault.settings };
   settings.view = { ...DEFAULT_VIEW, ...vault.settings?.view };
-  if (!Array.isArray(settings.failReasons) || settings.failReasons.length === 0) {
-    settings.failReasons = DEFAULT_FAIL_REASONS.map((r) => ({ ...r }));
-  }
 
   return {
     schemaVersion: SCHEMA_VERSION,

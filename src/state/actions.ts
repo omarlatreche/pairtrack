@@ -3,7 +3,7 @@
  * dumb and the behaviour is testable without rendering anything.
  */
 import { parseBarPair } from '../data/barPair';
-import { failGate, passGate, revertGate, setGate, type Gate } from '../data/transitions';
+import { signOff, toggleDone } from '../data/transitions';
 import { applyView } from '../data/view';
 import type { HistoryEntry, Job, JobProgress } from '../data/types';
 import { isMalformedEquipment } from '../import/buildJobs';
@@ -83,69 +83,48 @@ function applyChange(
   }
 }
 
-/** Tick: pass the current gate. One tap, correct timestamp, undo offered. */
-export function markPass(jobId: string, options: MarkOptions = {}): void {
+/**
+ * The only per-job action there is (D17): tick it, or un-tick it.
+ *
+ * He tapped through three gates before and said it was too complicated. One tap
+ * on the card marks the job done and stamps the time; tapping again undoes it.
+ */
+export function toggleJobDone(jobId: string, options: MarkOptions = {}): void {
   const job = findJob(jobId);
-  if (job === null || job.progress.locked) return;
+  if (job === null) return;
 
-  const change = passGate(job, nowIso(), engineerName());
-  if (change.progress === job.progress) return; // nothing left to advance
+  const wasDone = job.progress.doneAt !== null;
+  const change = toggleDone(job, nowIso(), engineerName());
 
-  applyChange(job, change.progress, change.history, 'Marked pass', options);
-  haptic(40);
+  applyChange(job, change.progress, [], change.label, options);
+  // Un-ticking feels different from ticking without having to look.
+  haptic(wasDone ? 20 : 40);
 }
 
-/** Cross: fail the current gate with a reason code. */
-export function markFail(jobId: string, reasonCode: string | null, options: MarkOptions = {}): void {
-  const job = findJob(jobId);
-  if (job === null || job.progress.locked) return;
+/**
+ * The batch action: sign off everything currently pending.
+ *
+ * `signOff` returns null for anything not pending, so this cannot sign off a
+ * job he never ticked, and running it twice is harmless.
+ */
+export function signOffPending(): number {
+  const pack = activePack();
+  if (pack === null) return 0;
 
-  const change = failGate(job, nowIso(), reasonCode);
-  applyChange(job, change.progress, change.history, 'Marked failed', options);
-  // Two short pulses, so a fail feels different from a pass without looking.
-  haptic([30, 60, 30]);
-}
+  const now = nowIso();
+  const ids = pack.jobs.filter((j) => signOff(j.progress, now) !== null).map((j) => j.id);
+  if (ids.length === 0) return 0;
 
-/** Step one gate backwards. */
-export function markRevert(jobId: string, options: MarkOptions = {}): void {
-  const job = findJob(jobId);
-  if (job === null || job.progress.locked) return;
+  for (const id of ids) {
+    updateJob(id, (job) => {
+      const progress = signOff(job.progress, now);
+      return progress === null ? job : { ...job, progress };
+    });
+  }
 
-  const change = revertGate(job, nowIso());
-  if (change.progress === job.progress) return;
-
-  applyChange(job, change.progress, change.history, 'Reverted', options);
-  haptic(20);
-}
-
-/** Set a specific gate from the detail screen's segmented controls. */
-export function setJobGate(
-  jobId: string,
-  gate: Gate,
-  value: 'yes' | 'failed' | 'pass' | 'fail' | 'done' | null,
-): void {
-  const job = findJob(jobId);
-  if (job === null || job.progress.locked) return;
-
-  const change = setGate(job, gate, value, nowIso(), engineerName());
-  applyChange(job, change.progress, change.history, 'Changed', { advance: false });
-  haptic(20);
-}
-
-// --- Free-text and flag edits ----------------------------------------------
-
-export function setNotes(jobId: string, notes: string): void {
-  updateJob(jobId, (job) => ({
-    ...job,
-    progress: { ...job.progress, notes, updatedAt: nowIso() },
-  }));
-}
-
-export function setVertUp(jobId: string, vert: string | null, up: string | null): void {
-  updateJob(jobId, (job) => ({
-    ...job,
-    progress: { ...job.progress, vert, up, updatedAt: nowIso() },
-  }));
+  countChange();
+  haptic([30, 40]);
+  return ids.length;
 }
 
 export function setCompletedBy(jobId: string, completedBy: string): void {
@@ -156,13 +135,6 @@ export function setCompletedBy(jobId: string, completedBy: string): void {
       completedBy: completedBy.trim() === '' ? null : completedBy,
       updatedAt: nowIso(),
     },
-  }));
-}
-
-export function toggleLocked(jobId: string): void {
-  updateJob(jobId, (job) => ({
-    ...job,
-    progress: { ...job.progress, locked: !job.progress.locked, updatedAt: nowIso() },
   }));
 }
 

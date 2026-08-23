@@ -190,6 +190,56 @@ The unconditional restore was a second bug: it discarded a tick made while the
 failed write was in flight, leaving that tick on screen and in memory but never
 on disk.
 
+## D17 — Done / not done, then batch sign-off. No job detail screen.
+
+**Chosen:** one tap on a card marks a job done. Done jobs collect in a *pending*
+pile. A single batch action signs the whole pile off. There is no job detail
+screen and no way to open a job at all.
+
+**Why:** the engineer used it and said it was too complicated. His words: he
+should not have to click a job to see its details, should not have to click jobs
+at all, wants done/not done with no notes, and wants every field on the front
+screen.
+
+That is not a UI preference, it invalidates several things built on assumptions
+never confirmed with him:
+
+- The **three gates** (Ready to activate → Test → Completed) were modelled from
+  the old tool's columns. He wants one state change. The gates were three taps
+  and three decisions where he had one.
+- **Notes**, **fail reasons** (D11) and **VERT/UP** (§14 Q2) all existed only
+  because a detail screen existed. VERT/UP were never in the source file and were
+  never confirmed with him — assumption §14 Q2, now answered: drop them.
+- **`locked`** (D12) was kept on the guess that a "don't touch" marker was
+  useful. §14 Q8 asked whether he wanted it at all. He did not mention it, and it
+  is per-job furniture on a screen he wants uncluttered. Removed.
+- The **failed** state goes. Asked directly, he wants two states. A job he could
+  not do stays not-done and he tells the office. This removes the fail sheet, the
+  editable reason list and every failed branch in the transition table.
+
+**The batch sign-off is not new.** The old tool had `Test Submit` and
+`Completed Submit` buttons and a three-stage pending tracker. He is asking for
+the workflow he already knows, minus the per-job fiddliness — which is a much
+better signal than a request for something novel.
+
+**`JOB` is what he reads; `Job Number` is still the key.** He said job is the
+important identifier, not job number. Column A (`JOB`) is a row index 1–442 and
+`SCHEMA.md` is explicit that it is **not an identifier** — it is not stable when
+next week's pack is regenerated. So the two are separated: `JOB` is what the card
+leads with and what he searches, `Job Number` stays the natural key for re-import
+matching. Keying re-import on a row index would silently move his ticks onto
+different circuits, which is the exact silent-loss failure this project keeps
+finding.
+
+**Timestamps:** he said only the completed timestamp matters, so that is the only
+one written, stamped when he taps at the frame rather than when the batch is
+signed off — the time the work happened is the true one.
+
+**Open with the office:** `READY TO ACTIVATE`, `ACTIVATION TIMESTAMP` and
+`TEST STATUS` therefore export **blank**. Writing `Yes`/`Pass` into them would
+make the sheet look complete, but it would assert a test that nobody performed,
+and this is a telecoms record. Blank and honest until the office says otherwise.
+
 ---
 
 ## Deferred — explicitly not built in v1 (BRIEF §12)

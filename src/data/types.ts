@@ -8,7 +8,13 @@
 
 export type JobType = 'no-ties' | 'ed-side' | 'llu';
 
-export type JobStatus = 'outstanding' | 'activated' | 'failed' | 'tested' | 'completed';
+/**
+ * Two things he does, one thing the batch does (D17).
+ *
+ * `pending` is not a third thing to decide: it is simply "ticked at the frame,
+ * not yet signed off". The old tool called the same idea "Completed pending".
+ */
+export type JobStatus = 'outstanding' | 'pending' | 'signed-off';
 
 /** Parsed from MDF BAR PAIR. null when the value is unparseable. */
 export interface BarPair {
@@ -25,21 +31,18 @@ export interface BarPair {
 export type DefectCode = 'bad-barpair' | 'bad-old-equipment' | 'missing-job-number' | 'duplicate-job-number';
 
 export interface JobProgress {
-  readyToActivate: null | 'yes' | 'failed';
-  /** ISO 8601. Written by the app on gate change, never typed. */
-  activatedAt: string | null;
-  testStatus: null | 'pass' | 'fail';
-  testedAt: string | null;
-  completedAt: string | null;
+  /**
+   * Ticked at the frame. ISO 8601, written by the app, never typed.
+   *
+   * Stamped when he taps, NOT when the batch is signed off — the moment the
+   * work happened is the true one, and it is the only timestamp he said matters
+   * (D17).
+   */
+  doneAt: string | null;
+  /** Set when the pending pile is signed off as a batch. */
+  signedOffAt: string | null;
+  /** Auto-filled from settings.engineerName. Never typed per job. */
   completedBy: string | null;
-  /** A stable reason *code*, not a label — labels are editable (D11). */
-  failReason: string | null;
-  /** Engineer-entered on site; not in the source sheet. */
-  vert: string | null;
-  up: string | null;
-  notes: string;
-  /** Local "don't touch this row" guard (D12). */
-  locked: boolean;
   updatedAt: string;
 }
 
@@ -122,19 +125,10 @@ export interface Settings {
   /** 1-60, BRIEF §9.4. */
   autoLockMinutes: number;
   theme: 'dark' | 'sunlight';
-  /** Editable fail-reason labels, keyed by stable code (D11). */
-  failReasons: FailReason[];
   view: ViewSpec;
   /** Changes since the last backup prompt — BRIEF §9.5. */
   changesSinceBackup: number;
   lastBackupAt: string | null;
-}
-
-export interface FailReason {
-  readonly code: string;
-  label: string;
-  /** false = hidden from the one-tap sheet but kept so old data still resolves. */
-  enabled: boolean;
 }
 
 // --- View state (sort / filter / search), persisted across launches ---------
@@ -152,7 +146,7 @@ export type SortDirection = 'asc' | 'desc';
 
 export type GroupMode = 'none' | 'block' | 'oldShelf' | 'status';
 
-export type StatusFilter = 'all' | JobStatus | 'locked' | 'attention';
+export type StatusFilter = 'all' | JobStatus | 'attention';
 
 export interface ViewSpec {
   sortField: SortField;

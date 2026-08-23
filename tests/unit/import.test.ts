@@ -8,7 +8,7 @@ import { cleanCell, parseWorkbook } from '../../src/import/parse';
 import { buildJobs, deriveJobType, isMalformedEquipment, jobIdFor } from '../../src/import/buildJobs';
 import { detectConstantColumns, detectRole, detectRoles, headerForRole } from '../../src/import/columns';
 import { describeMerge, mergeJobs, packNameFromFile, previewMerge } from '../../src/import/merge';
-import { emptyProgress, passGate } from '../../src/data/transitions';
+import { emptyProgress, toggleDone } from '../../src/data/transitions';
 import type { Job } from '../../src/data/types';
 import { syntheticHeaders, syntheticRows, syntheticWorkbookBytes } from './fixtures/syntheticPack';
 
@@ -203,7 +203,7 @@ describe('imported values', () => {
   });
 
   it('starts every job outstanding with empty progress', () => {
-    expect(jobs.every((job) => job.progress.readyToActivate === null)).toBe(true);
+    expect(jobs.every((job) => job.progress.doneAt === null)).toBe(true);
     expect(jobs.every((job) => job.history.length === 0)).toBe(true);
   });
 });
@@ -267,21 +267,21 @@ describe('merge on re-import', () => {
 
   it('keeps progress on matched jobs', () => {
     const existing = build(20).map((job, i) =>
-      i < 5 ? { ...job, progress: passGate(job, NOW, 'Engineer').progress } : job,
+      i < 5 ? { ...job, progress: toggleDone(job, NOW, 'Engineer').progress } : job,
     );
     const incoming = build(20);
 
     const merged = mergeJobs(existing, incoming, NOW);
 
     expect(merged).toHaveLength(20);
-    expect(merged.slice(0, 5).every((job) => job.progress.readyToActivate === 'yes')).toBe(true);
-    expect(merged.slice(0, 5).every((job) => job.progress.activatedAt === NOW)).toBe(true);
+    expect(merged.slice(0, 5).every((job) => job.progress.doneAt === NOW)).toBe(true);
+    expect(merged.slice(0, 5).every((job) => job.progress.completedBy === 'Engineer')).toBe(true);
   });
 
   it('refreshes source columns while leaving progress alone', () => {
     const existing = build(5).map((job) => ({
       ...job,
-      progress: { ...passGate(job, NOW, null).progress, notes: 'my note' },
+      progress: toggleDone(job, NOW, 'Engineer').progress,
     }));
 
     const incoming = build(5).map((job) => ({
@@ -291,8 +291,8 @@ describe('merge on re-import', () => {
 
     const merged = mergeJobs(existing, incoming, NOW);
     expect(merged[0]?.source.DB).toBe('ZZ');
-    expect(merged[0]?.progress.notes).toBe('my note');
-    expect(merged[0]?.progress.readyToActivate).toBe('yes');
+    expect(merged[0]?.progress.completedBy).toBe('Engineer');
+    expect(merged[0]?.progress.doneAt).toBe(NOW);
   });
 
   it('flags a job missing from the new pack instead of deleting it', () => {
@@ -308,7 +308,7 @@ describe('merge on re-import', () => {
 
   it('previews the merge before anything is committed', () => {
     const existing = build(20).map((job, i) =>
-      i < 7 ? { ...job, progress: passGate(job, NOW, null).progress } : job,
+      i < 7 ? { ...job, progress: toggleDone(job, NOW, null).progress } : job,
     );
     const incoming = build(22);
 
@@ -351,20 +351,11 @@ describe('progress is untouched by a source refresh', () => {
       ...(job as Job),
       progress: {
         ...emptyProgress(NOW),
-        readyToActivate: 'yes',
-        activatedAt: NOW,
-        testStatus: 'pass',
-        testedAt: NOW,
-        completedAt: NOW,
+        doneAt: NOW,
         completedBy: 'Engineer',
-        failReason: null,
-        vert: '12',
-        up: '4',
-        notes: 'jumper ran short',
-        locked: true,
         updatedAt: NOW,
       },
-      history: [{ at: NOW, field: 'Ready to activate', from: null, to: 'yes' }],
+      history: [{ at: NOW, field: 'Done', from: null, to: NOW }],
     };
 
     const incoming = buildJobs(syntheticRows({ rows: 1 }), headers, mapping, NOW).jobs;

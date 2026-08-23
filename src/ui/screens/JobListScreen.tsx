@@ -10,9 +10,8 @@ import { STATUS_LABELS } from '../../data/transitions';
 import type { Job, JobStatus, JobType, StatusFilter } from '../../data/types';
 import { applyView, countJobs, JOB_TYPE_LABELS, sortFieldLabel } from '../../data/view';
 import { headerForRole } from '../../import/columns';
-import { markFail, markPass, setNotes } from '../../state/actions';
+import { signOffPending, toggleJobDone } from '../../state/actions';
 import { activePack, setState, updateView, type AppState } from '../../state/store';
-import { FailSheet } from '../components/FailSheet';
 import { JobCard } from '../components/JobCard';
 import { SearchIcon, SortIcon, CrossIcon, ImportIcon, ExportIcon } from '../components/Icons';
 import { SortSheet } from '../components/SortSheet';
@@ -22,24 +21,16 @@ import { ExportSheet } from '../components/ExportSheet';
 
 const SEARCH_DEBOUNCE_MS = 120;
 
-const STATUS_CHIPS: StatusFilter[] = [
-  'all',
-  'outstanding',
-  'activated',
-  'tested',
-  'completed',
-  'failed',
-  'locked',
-];
+// Four chips, not seven. He asked for done / not done; 'pending' and
+// 'signed-off' are where a done job sits before and after the batch (D17).
+const STATUS_CHIPS: StatusFilter[] = ['all', 'outstanding', 'pending', 'signed-off'];
 
 export function JobListScreen({ state }: { state: AppState }) {
   const pack = activePack();
   const view = state.vault?.settings.view;
-  const failReasons = state.vault?.settings.failReasons ?? [];
 
   const scroller = useRef<HTMLDivElement>(null);
   const [sortOpen, setSortOpen] = useState(false);
-  const [failFor, setFailFor] = useState<Job | null>(null);
   const [exportOpen, setExportOpen] = useState(false);
 
   // Debounced so typing stays responsive; 120ms, no more (BRIEF §7.5).
@@ -101,37 +92,29 @@ export function JobListScreen({ state }: { state: AppState }) {
   }
 
   const columns = {
+    circuit: headerForRole(pack.columnMapping, 'circuit'),
     oldEquipment: headerForRole(pack.columnMapping, 'oldEquipment'),
-    newEquipment: headerForRole(pack.columnMapping, 'newEquipment'),
     esideTies: headerForRole(pack.columnMapping, 'esideTies'),
     dsideTies: headerForRole(pack.columnMapping, 'dsideTies'),
   };
 
+  // The pending pile: ticked at the frame, not yet signed off.
+  const pendingCount = pack.jobs.filter((job) => job.progress.doneAt !== null && job.progress.signedOffAt === null).length;
+
   function chipCount(filter: StatusFilter): number {
     if (counts === null) return 0;
     if (filter === 'all') return counts.all;
-    if (filter === 'locked') return counts.locked;
     if (filter === 'attention') return counts.attention;
     return counts.byStatus[filter as JobStatus];
   }
 
   function chipLabel(filter: StatusFilter): string {
     if (filter === 'all') return 'All';
-    if (filter === 'locked') return 'Locked';
     if (filter === 'attention') return 'Needs attention';
     return STATUS_LABELS[filter as JobStatus];
   }
 
   const frames = Object.keys(counts.byFrame).sort();
-
-  function openJob(jobId: string) {
-    setState({ screen: { name: 'detail', jobId } });
-  }
-
-  function onFail(jobId: string) {
-    const job = pack?.jobs.find((candidate) => candidate.id === jobId) ?? null;
-    setFailFor(job);
-  }
 
   return (
     <>
@@ -142,7 +125,7 @@ export function JobListScreen({ state }: { state: AppState }) {
             type="search"
             inputMode="search"
             enterKeyHint="search"
-            placeholder="Job, circuit, bar pair, ties, notes"
+            placeholder="Job, circuit, bar pair, ties"
             aria-label="Search jobs"
             value={searchDraft}
             onInput={(event) => setSearchDraft((event.target as HTMLInputElement).value)}
@@ -236,6 +219,22 @@ export function JobListScreen({ state }: { state: AppState }) {
       </div>
 
       <div class="list list--cards" ref={scroller}>
+        {/*
+          Inside the scroller, not above it: sticky to the page would slide
+          under the fixed header and be invisible while still being in the DOM.
+        */}
+        {pendingCount > 0 && (
+          <div class="signoff" role="status">
+            <span class="signoff__count">{pendingCount} done, not signed off</span>
+            <button
+              type="button"
+              class="button button--primary signoff__button"
+              onClick={() => signOffPending()}
+            >
+              Sign off all {pendingCount}
+            </button>
+          </div>
+        )}
         {jobs.length === 0 && (
           <div class="empty">
             <p class="empty__title">Nothing matches</p>
@@ -250,14 +249,7 @@ export function JobListScreen({ state }: { state: AppState }) {
             scrollRef={scroller}
             renderItem={(job) => (
               <div data-job-id={job.id}>
-                <JobCard
-                  job={job}
-                  columns={columns}
-                  failReasons={failReasons}
-                  onOpen={openJob}
-                  onPass={markPass}
-                  onFail={onFail}
-                />
+                <JobCard job={job} columns={columns} onToggleDone={toggleJobDone} />
               </div>
             )}
           />
@@ -272,14 +264,7 @@ export function JobListScreen({ state }: { state: AppState }) {
               </header>
               {group.jobs.map((job) => (
                 <div key={job.id} data-job-id={job.id}>
-                  <JobCard
-                    job={job}
-                    columns={columns}
-                    failReasons={failReasons}
-                    onOpen={openJob}
-                    onPass={markPass}
-                    onFail={onFail}
-                  />
+                  <JobCard job={job} columns={columns} onToggleDone={toggleJobDone} />
                 </div>
               ))}
             </section>
@@ -292,9 +277,7 @@ export function JobListScreen({ state }: { state: AppState }) {
         jobs={jobs}
         pack={pack}
         view={view}
-        onOpen={openJob}
-        onPass={markPass}
-        onFail={onFail}
+        onToggleDone={toggleJobDone}
         onSort={(field) =>
           updateView(
             view.sortField === field
@@ -336,25 +319,6 @@ export function JobListScreen({ state }: { state: AppState }) {
         />
       )}
 
-      {failFor !== null && (
-        <FailSheet
-          jobNumber={failFor.jobNumber}
-          reasons={failReasons}
-          onPick={(code, note) => {
-            const job = failFor;
-            setFailFor(null);
-            if (job === null) return;
-            markFail(job.id, code);
-            if (note !== null) {
-              // "Other" free text lands in notes, where an office query three
-              // weeks later will actually look for it.
-              const existing = job.progress.notes.trim();
-              setNotes(job.id, existing === '' ? note : `${existing}\n${note}`);
-            }
-          }}
-          onClose={() => setFailFor(null)}
-        />
-      )}
 
       {exportOpen && <ExportSheet pack={pack} onClose={() => setExportOpen(false)} />}
     </>

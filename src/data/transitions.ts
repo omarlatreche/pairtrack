@@ -1,311 +1,91 @@
 /**
- * Status derivation and the legal-transition table — BRIEF §5.1.
+ * Status derivation and the two things that change it — BRIEF §5.1, D17.
  *
- * Status is **derived**, never stored (D9). A stored status is a second source
- * of truth and it drifts; deriving it means a gate change cannot leave the
- * badge wrong.
+ * This used to be a three-gate table (Ready to activate → Test → Completed)
+ * with a failed branch, modelled on the old tool's columns. The engineer used it
+ * and said it was too complicated: he wants done or not done, and nothing else
+ * to decide at the frame. So there is one per-job action, `toggleDone`, and one
+ * batch action, `signOff`.
  *
- * Everything here is pure. No IO, no clock beyond an injected `now`, so the
- * whole table is unit-testable.
+ * Status is still **derived**, never stored (D9). A stored status is a second
+ * source of truth and it drifts.
+ *
+ * Everything here is pure. No IO, no clock beyond an injected `now`.
  */
-import type { HistoryEntry, Job, JobProgress, JobStatus } from './types';
+import type { Job, JobProgress, JobStatus } from './types';
 
 /**
- * The three gates, in order. Each has a value field and a timestamp field that
- * the app writes.
+ * `pending` means ticked at the frame but not yet signed off. It is not a
+ * decision he makes — it is where a job sits between his tap and the batch.
  */
-export type Gate = 'activate' | 'test' | 'complete';
-
 export function deriveStatus(progress: JobProgress): JobStatus {
-  // Failure at any gate wins — a failed job is not "in progress".
-  if (progress.readyToActivate === 'failed' || progress.testStatus === 'fail') {
-    return 'failed';
-  }
-  if (progress.completedAt !== null) return 'completed';
-  if (progress.testStatus === 'pass') return 'tested';
-  if (progress.readyToActivate === 'yes') return 'activated';
+  if (progress.signedOffAt !== null) return 'signed-off';
+  if (progress.doneAt !== null) return 'pending';
   return 'outstanding';
-}
-
-/**
- * The gate a tick or a cross applies to right now.
- *
- * This is what makes one-tap work: he never picks a gate, the app knows which
- * one is next. A failed job re-opens at the gate that failed.
- */
-export function currentGate(progress: JobProgress): Gate | null {
-  if (progress.readyToActivate === 'failed') return 'activate';
-  if (progress.testStatus === 'fail') return 'test';
-  if (progress.readyToActivate !== 'yes') return 'activate';
-  if (progress.testStatus !== 'pass') return 'test';
-  if (progress.completedAt === null) return 'complete';
-  return null; // fully complete — nothing left to advance
-}
-
-export const GATE_LABELS: Record<Gate, string> = {
-  activate: 'Ready to activate',
-  test: 'Test',
-  complete: 'Completed',
-};
-
-/** Legal transitions, for the tests and for the detail screen's segmented controls. */
-export const LEGAL_TRANSITIONS: Record<JobStatus, JobStatus[]> = {
-  outstanding: ['activated', 'failed'],
-  activated: ['tested', 'failed', 'outstanding'],
-  tested: ['completed', 'failed', 'activated'],
-  completed: ['tested'],
-  failed: ['outstanding', 'activated', 'tested'],
-};
-
-export function isLegalTransition(from: JobStatus, to: JobStatus): boolean {
-  if (from === to) return true;
-  return (LEGAL_TRANSITIONS[from] ?? []).includes(to);
 }
 
 export interface ProgressChange {
   readonly progress: JobProgress;
-  readonly history: HistoryEntry[];
-}
-
-function record(
-  history: HistoryEntry[],
-  at: string,
-  field: string,
-  from: string | null,
-  to: string | null,
-): HistoryEntry[] {
-  if (from === to) return history;
-  return [...history, { at, field, from, to }];
+  /** Human-readable, for the undo toast. */
+  readonly label: string;
 }
 
 /**
- * Pass the current gate. Writes the gate's timestamp — timestamps are always
- * written by the app, never typed (BRIEF §5.1).
+ * The single per-job action: tick it, or un-tick it.
+ *
+ * Un-ticking a job that has already been signed off clears the sign-off too —
+ * otherwise the job would sit in an impossible state (signed off, not done).
  */
-export function passGate(job: Job, now: string, completedBy: string | null): ProgressChange {
-  const p = { ...job.progress };
-  let history = job.history;
-  const gate = currentGate(p);
+export function toggleDone(job: Job, now: string, completedBy: string | null): ProgressChange {
+  const p = job.progress;
 
-  switch (gate) {
-    case 'activate':
-      history = record(history, now, 'Ready to activate', p.readyToActivate, 'yes');
-      p.readyToActivate = 'yes';
-      p.activatedAt = now;
-      // Passing a previously-failed gate clears the reason: it no longer applies.
-      if (p.failReason !== null) {
-        history = record(history, now, 'Fail reason', p.failReason, null);
-        p.failReason = null;
-      }
-      break;
-
-    case 'test':
-      history = record(history, now, 'Test status', p.testStatus, 'pass');
-      p.testStatus = 'pass';
-      p.testedAt = now;
-      if (p.failReason !== null) {
-        history = record(history, now, 'Fail reason', p.failReason, null);
-        p.failReason = null;
-      }
-      break;
-
-    case 'complete':
-      history = record(history, now, 'Completed', null, now);
-      p.completedAt = now;
-      p.completedBy = completedBy;
-      break;
-
-    case null:
-      return { progress: job.progress, history: job.history };
+  if (p.doneAt !== null) {
+    return {
+      progress: { ...p, doneAt: null, signedOffAt: null, completedBy: null, updatedAt: now },
+      label: 'Marked not done',
+    };
   }
 
-  p.updatedAt = now;
-  return { progress: p, history };
+  return {
+    progress: { ...p, doneAt: now, completedBy, updatedAt: now },
+    label: 'Marked done',
+  };
 }
 
 /**
- * Fail the current gate. A fail must be as fast as a pass or it does not get
- * recorded properly (BRIEF §7.6).
+ * The batch action: sign off everything currently pending.
+ *
+ * Only touches jobs that are done and not yet signed off, so running it twice
+ * is harmless and it can never sign off something he has not ticked.
  */
-export function failGate(job: Job, now: string, reasonCode: string | null): ProgressChange {
-  const p = { ...job.progress };
-  let history = job.history;
-  const gate = currentGate(p) ?? 'complete';
-
-  if (gate === 'activate') {
-    history = record(history, now, 'Ready to activate', p.readyToActivate, 'failed');
-    p.readyToActivate = 'failed';
-    p.activatedAt = null;
-  } else {
-    // Failing at the test or completion gate records a test failure — that is
-    // the only fail state the source workflow has past activation.
-    history = record(history, now, 'Test status', p.testStatus, 'fail');
-    p.testStatus = 'fail';
-    p.testedAt = now;
-    p.completedAt = null;
-    p.completedBy = null;
-  }
-
-  history = record(history, now, 'Fail reason', p.failReason, reasonCode);
-  p.failReason = reasonCode;
-  p.updatedAt = now;
-
-  return { progress: p, history };
-}
-
-/**
- * Step one gate backwards. This is what "undo" and the detail screen's
- * segmented controls use — everything is revertible (BRIEF §5.1).
- */
-export function revertGate(job: Job, now: string): ProgressChange {
-  const p = { ...job.progress };
-  let history = job.history;
-
-  if (p.completedAt !== null) {
-    history = record(history, now, 'Completed', p.completedAt, null);
-    p.completedAt = null;
-    p.completedBy = null;
-  } else if (p.testStatus !== null) {
-    history = record(history, now, 'Test status', p.testStatus, null);
-    p.testStatus = null;
-    p.testedAt = null;
-    history = record(history, now, 'Fail reason', p.failReason, null);
-    p.failReason = null;
-  } else if (p.readyToActivate !== null) {
-    history = record(history, now, 'Ready to activate', p.readyToActivate, null);
-    p.readyToActivate = null;
-    p.activatedAt = null;
-    history = record(history, now, 'Fail reason', p.failReason, null);
-    p.failReason = null;
-  } else {
-    return { progress: job.progress, history: job.history };
-  }
-
-  p.updatedAt = now;
-  return { progress: p, history };
-}
-
-/**
- * Set a gate to an explicit value from the detail screen. Clearing a gate
- * clears its timestamp — the rule in BRIEF §5.1 runs in both directions.
- */
-export function setGate(
-  job: Job,
-  gate: Gate,
-  value: 'yes' | 'failed' | 'pass' | 'fail' | 'done' | null,
-  now: string,
-  completedBy: string | null,
-): ProgressChange {
-  const p = { ...job.progress };
-  let history = job.history;
-
-  /** Clear the fail reason once neither gate is in a failed state. */
-  function clearReasonIfResolved(): void {
-    if (p.readyToActivate === 'failed' || p.testStatus === 'fail') return;
-    if (p.failReason === null) return;
-    history = record(history, now, 'Fail reason', p.failReason, null);
-    p.failReason = null;
-  }
-
-  /** Clearing a gate clears everything downstream of it. */
-  function clearTest(): void {
-    if (p.testStatus === null && p.testedAt === null) return;
-    history = record(history, now, 'Test status', p.testStatus, null);
-    p.testStatus = null;
-    p.testedAt = null;
-  }
-
-  function clearCompleted(): void {
-    if (p.completedAt === null) return;
-    history = record(history, now, 'Completed', p.completedAt, null);
-    p.completedAt = null;
-    p.completedBy = null;
-  }
-
-  if (gate === 'activate') {
-    const next = value === 'yes' || value === 'failed' ? value : null;
-    history = record(history, now, 'Ready to activate', p.readyToActivate, next);
-    p.readyToActivate = next;
-    p.activatedAt = next === 'yes' ? now : null;
-
-    // The gates are ordered, and the export presents them as an ordered record.
-    // Nothing downstream can stand without a successful activation, so undoing
-    // one has to undo what followed it — otherwise the office receives a row
-    // reading "not activated, test passed, completed".
-    if (next !== 'yes') {
-      clearTest();
-      clearCompleted();
-    }
-  } else if (gate === 'test') {
-    const next = value === 'pass' || value === 'fail' ? value : null;
-    history = record(history, now, 'Test status', p.testStatus, next);
-    p.testStatus = next;
-    p.testedAt = next === null ? null : now;
-
-    if (next !== 'pass') clearCompleted();
-  } else {
-    const done = value === 'done';
-    history = record(history, now, 'Completed', p.completedAt, done ? now : null);
-    p.completedAt = done ? now : null;
-    p.completedBy = done ? completedBy : null;
-  }
-
-  // Deliberately after the gate change, and shared by all three branches.
-  //
-  // The old activate branch asked `p.testStatus === null`, which also refused
-  // to clear the reason when the test had PASSED. So: fail a job, pass the
-  // test, then set activate back to Yes, and the job showed as Tested while
-  // still carrying "Wiring damaged" — which then went to the office in the
-  // export next to STATUS: Completed.
-  clearReasonIfResolved();
-
-  p.updatedAt = now;
-  return { progress: p, history };
+export function signOff(progress: JobProgress, now: string): JobProgress | null {
+  if (progress.doneAt === null || progress.signedOffAt !== null) return null;
+  return { ...progress, signedOffAt: now, updatedAt: now };
 }
 
 export function emptyProgress(now: string): JobProgress {
   return {
-    readyToActivate: null,
-    activatedAt: null,
-    testStatus: null,
-    testedAt: null,
-    completedAt: null,
+    doneAt: null,
+    signedOffAt: null,
     completedBy: null,
-    failReason: null,
-    vert: null,
-    up: null,
-    notes: '',
-    locked: false,
     updatedAt: now,
   };
 }
 
-/** True when the job has any recorded progress — used by the merge preview. */
+/** Does this job carry anything worth preserving across a re-import? */
 export function hasProgress(progress: JobProgress): boolean {
-  return (
-    progress.readyToActivate !== null ||
-    progress.testStatus !== null ||
-    progress.completedAt !== null ||
-    progress.notes.trim() !== '' ||
-    progress.vert !== null ||
-    progress.up !== null ||
-    progress.locked
-  );
+  return progress.doneAt !== null || progress.signedOffAt !== null;
 }
 
 export const STATUS_LABELS: Record<JobStatus, string> = {
-  outstanding: 'Outstanding',
-  activated: 'Activated',
-  tested: 'Tested',
-  completed: 'Completed',
-  failed: 'Failed',
+  outstanding: 'Not done',
+  pending: 'Done',
+  'signed-off': 'Signed off',
 };
 
-/** Sort rank for status, so "sort by status" follows the workflow, not the alphabet. */
+/** Sort order for grouping by status: what still needs doing comes first. */
 export const STATUS_RANK: Record<JobStatus, number> = {
   outstanding: 0,
-  failed: 1,
-  activated: 2,
-  tested: 3,
-  completed: 4,
+  pending: 1,
+  'signed-off': 2,
 };

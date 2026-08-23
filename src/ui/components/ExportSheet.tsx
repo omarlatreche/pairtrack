@@ -28,7 +28,6 @@ export function ExportSheet({ pack, onClose }: ExportSheetProps) {
   const [passphraseAgain, setPassphraseAgain] = useState('');
   const [backupPrompt, setBackupPrompt] = useState(false);
 
-  const failReasons = getState().vault?.settings.failReasons ?? [];
 
   async function run(label: string, work: () => Promise<void>) {
     setBusy(label);
@@ -49,8 +48,8 @@ export function ExportSheet({ pack, onClose }: ExportSheetProps) {
     await run(kind === 'xlsx' ? 'Building spreadsheet' : 'Building CSV', async () => {
       const blob =
         kind === 'xlsx'
-          ? await buildXlsx(pack, pack.jobs, failReasons)
-          : buildCsv(pack, pack.jobs, failReasons);
+          ? await buildXlsx(pack, pack.jobs)
+          : buildCsv(pack, pack.jobs);
       const name = exportFileName(pack, kind);
       const how = await deliverFile(blob, name);
       if (how === 'cancelled') {

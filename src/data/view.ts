@@ -38,9 +38,6 @@ const JOB_TYPE_RANK: Record<JobType, number> = { 'no-ties': 0, 'ed-side': 1, llu
 export function searchIndexFor(job: Job): string {
   const parts: string[] = [job.jobNumber, String(job.seq)];
   for (const value of Object.values(job.source)) parts.push(value);
-  if (job.progress.notes) parts.push(job.progress.notes);
-  if (job.progress.vert) parts.push(job.progress.vert);
-  if (job.progress.up) parts.push(job.progress.up);
   if (job.progress.completedBy) parts.push(job.progress.completedBy);
   return normaliseForSearch(parts.join(' '));
 }
@@ -79,9 +76,6 @@ export function matchesFilters(job: Job, view: ViewSpec): boolean {
 
   switch (view.status) {
     case 'all':
-      break;
-    case 'locked':
-      if (!job.progress.locked) return false;
       break;
     case 'attention':
       if (job.defects.length === 0) return false;
@@ -180,7 +174,7 @@ export function groupJobs(
         key: 'all',
         label: '',
         jobs,
-        done: jobs.filter((j) => deriveStatus(j.progress) === 'completed').length,
+        done: jobs.filter((j) => deriveStatus(j.progress) !== 'outstanding').length,
         total: jobs.length,
       },
     ];
@@ -205,7 +199,7 @@ export function groupJobs(
     key,
     label: key,
     jobs: groupJobsList,
-    done: groupJobsList.filter((j) => deriveStatus(j.progress) === 'completed').length,
+    done: groupJobsList.filter((j) => deriveStatus(j.progress) !== 'outstanding').length,
     total: groupJobsList.length,
   }));
 }
@@ -227,7 +221,6 @@ export function applyView(
 export interface FilterCounts {
   readonly all: number;
   readonly byStatus: Record<JobStatus, number>;
-  readonly locked: number;
   readonly attention: number;
   readonly byType: Record<JobType, number>;
   readonly byFrame: Record<string, number>;
@@ -240,14 +233,11 @@ export interface FilterCounts {
 export function countJobs(jobs: Job[], search: string): FilterCounts {
   const byStatus: Record<JobStatus, number> = {
     outstanding: 0,
-    activated: 0,
-    tested: 0,
-    completed: 0,
-    failed: 0,
+    pending: 0,
+    'signed-off': 0,
   };
   const byType: Record<JobType, number> = { 'no-ties': 0, 'ed-side': 0, llu: 0 };
   const byFrame: Record<string, number> = {};
-  let locked = 0;
   let attention = 0;
   let all = 0;
 
@@ -258,9 +248,8 @@ export function countJobs(jobs: Job[], search: string): FilterCounts {
     byType[job.jobType] += 1;
     const frame = job.barPair?.frame ?? 'Unplaced';
     byFrame[frame] = (byFrame[frame] ?? 0) + 1;
-    if (job.progress.locked) locked += 1;
     if (job.defects.length > 0) attention += 1;
   }
 
-  return { all, byStatus, locked, attention, byType, byFrame };
+  return { all, byStatus, attention, byType, byFrame };
 }

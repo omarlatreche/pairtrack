@@ -10,9 +10,8 @@
  * transmitted, because there is nowhere to transmit it to.
  */
 import { formatStamp } from '../ui/components/format';
-import { failReasonLabel } from '../data/failReasons';
 import { deriveStatus, STATUS_LABELS } from '../data/transitions';
-import type { FailReason, Job, Pack } from '../data/types';
+import type { Job, Pack } from '../data/types';
 import { loadSheetJs } from '../import/parse';
 
 /**
@@ -32,23 +31,37 @@ const PROGRESS_COLUMNS = [
   'COMPLETED BY',
   'TIMESTAMP',
   'STATUS',
-  'FAIL REASON',
 ] as const;
 
-function progressValues(job: Job, failReasons: FailReason[]): Record<string, string> {
+/**
+ * Only two of these carry a value now (D17).
+ *
+ * The engineer marks done or not done, and said the completed timestamp is the
+ * only one that matters. So `TIMESTAMP`, `COMPLETED BY` and `STATUS` are
+ * written and the rest go out blank.
+ *
+ * The blank columns are kept rather than removed so the office's sheet keeps
+ * exactly the shape it has today — dropping columns is the kind of change that
+ * breaks somebody else's process without warning.
+ *
+ * They are NOT filled in with `Yes` / `Pass`. That would make the sheet look
+ * complete, but it would assert an activation and a test that nobody performed,
+ * on a telecoms record. Blank is the honest answer until the office says what
+ * they actually need. See D17, "Open with the office".
+ */
+function progressValues(job: Job): Record<string, string> {
   const p = job.progress;
   return {
-    VERT: p.vert ?? '',
-    UP: p.up ?? '',
-    'READY TO ACTIVATE': p.readyToActivate === 'yes' ? 'Yes' : p.readyToActivate === 'failed' ? 'Failed' : '',
-    'ACTIVATION TIMESTAMP': formatStamp(p.activatedAt),
-    'TEST STATUS': p.testStatus === 'pass' ? 'Pass' : p.testStatus === 'fail' ? 'Fail' : '',
-    'TEST TIMESTAMP': formatStamp(p.testedAt),
-    NOTES: p.notes,
+    VERT: '',
+    UP: '',
+    'READY TO ACTIVATE': '',
+    'ACTIVATION TIMESTAMP': '',
+    'TEST STATUS': '',
+    'TEST TIMESTAMP': '',
+    NOTES: '',
     'COMPLETED BY': p.completedBy ?? '',
-    TIMESTAMP: formatStamp(p.completedAt),
+    TIMESTAMP: formatStamp(p.doneAt),
     STATUS: STATUS_LABELS[deriveStatus(p)],
-    'FAIL REASON': failReasonLabel(failReasons, p.failReason),
   };
 }
 
@@ -56,13 +69,12 @@ function progressValues(job: Job, failReasons: FailReason[]): Record<string, str
 export function buildExportRows(
   pack: Pack,
   jobs: Job[],
-  failReasons: FailReason[],
 ): { headers: string[]; rows: string[][] } {
   // Source columns verbatim and in sheet order, so the file round-trips.
   const headers = [...pack.columns, ...PROGRESS_COLUMNS];
 
   const rows = jobs.map((job) => {
-    const progress = progressValues(job, failReasons);
+    const progress = progressValues(job);
     return headers.map((header) =>
       header in progress ? (progress[header] ?? '') : (job.source[header] ?? ''),
     );
@@ -85,10 +97,9 @@ export function exportFileName(pack: Pack, extension: string): string {
 export async function buildXlsx(
   pack: Pack,
   jobs: Job[],
-  failReasons: FailReason[],
 ): Promise<Blob> {
   const XLSX = await loadSheetJs();
-  const { headers, rows } = buildExportRows(pack, jobs, failReasons);
+  const { headers, rows } = buildExportRows(pack, jobs);
 
   const sheet = XLSX.utils.aoa_to_sheet([headers, ...rows]);
 
@@ -126,8 +137,8 @@ function csvCell(value: string): string {
   return value;
 }
 
-export function buildCsv(pack: Pack, jobs: Job[], failReasons: FailReason[]): Blob {
-  const { headers, rows } = buildExportRows(pack, jobs, failReasons);
+export function buildCsv(pack: Pack, jobs: Job[], ): Blob {
+  const { headers, rows } = buildExportRows(pack, jobs);
   const lines = [headers, ...rows].map((row) => row.map(csvCell).join(','));
 
   // A BOM, so Excel opens it as UTF-8 rather than mangling anything non-ASCII.

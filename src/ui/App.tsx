@@ -27,7 +27,6 @@ import { LockIcon, MoonIcon, SettingsIcon, SunIcon, UndoIcon } from './component
 import { applyUpdate } from './updateApp';
 import { FirstRunScreen } from './screens/FirstRunScreen';
 import { ImportScreen } from './screens/ImportScreen';
-import { JobDetailScreen } from './screens/JobDetailScreen';
 import { JobListScreen } from './screens/JobListScreen';
 import { LockScreen } from './screens/LockScreen';
 import { SettingsScreen } from './screens/SettingsScreen';
@@ -126,7 +125,7 @@ export function App() {
 
   const progress = useMemo(() => {
     if (pack === null) return { done: 0, total: 0 };
-    const done = pack.jobs.filter((job) => deriveStatus(job.progress) === 'completed').length;
+    const done = pack.jobs.filter((job) => deriveStatus(job.progress) !== 'outstanding').length;
     return { done, total: pack.jobs.length };
   }, [pack]);
 
@@ -175,9 +174,6 @@ export function App() {
 
   // Bound outside the callback: narrowing on `state.screen.name` does not
   // survive into a closure, because TypeScript cannot know when it runs.
-  const detailJobId = state.screen.name === 'detail' ? state.screen.jobId : null;
-  const detailJob =
-    detailJobId === null ? null : (pack?.jobs.find((job) => job.id === detailJobId) ?? null);
 
   return (
     <div class="app">
@@ -244,22 +240,6 @@ export function App() {
       <main class="screen">
         {state.screen.name === 'list' && <JobListScreen state={state} />}
 
-        {state.screen.name === 'detail' &&
-          (detailJob !== null && pack !== null && state.vault !== null ? (
-            <JobDetailScreen job={detailJob} pack={pack} settings={state.vault.settings} />
-          ) : (
-            <div class="empty">
-              <p class="empty__title">That job is not in this pack</p>
-              <button
-                type="button"
-                class="button"
-                onClick={() => setState({ screen: { name: 'list' } })}
-              >
-                Back to the list
-              </button>
-            </div>
-          ))}
-
         {state.screen.name === 'import' && <ImportScreen />}
         {state.screen.name === 'settings' && <SettingsScreen state={state} />}
       </main>
@@ -267,7 +247,7 @@ export function App() {
       {state.undo !== null && (
         <div class="toast" role="status">
           <span class="toast__text">
-            {state.undo.label} · {state.undo.previous.jobNumber}
+            {state.undo.label} · job {state.undo.previous.seq}
           </span>
           <button type="button" class="toast__undo" onClick={performUndo}>
             <UndoIcon size={18} />

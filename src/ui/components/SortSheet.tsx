@@ -140,7 +140,7 @@ export function SortSheet({ view, pack, onChange, onClose }: SortSheetProps) {
       ))}
 
       <button type="button" class="button button--primary" onClick={onClose}>
-        Done
+        Apply
       </button>
     </Sheet>
   );

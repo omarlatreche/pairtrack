@@ -9,24 +9,22 @@
  * action is a button, in document order.
  */
 import { formatBarPair } from '../../data/barPair';
-import { currentGate, deriveStatus, STATUS_LABELS } from '../../data/transitions';
+import { deriveStatus, STATUS_LABELS } from '../../data/transitions';
 import type { Job, Pack, SortField, ViewSpec } from '../../data/types';
 import { JOB_TYPE_LABELS } from '../../data/view';
 import { headerForRole } from '../../import/columns';
 import { formatStampSmart } from './format';
-import { CrossIcon, TickIcon } from './Icons';
+import { TickIcon } from './Icons';
 
 interface JobTableProps {
   readonly jobs: Job[];
   readonly pack: Pack;
   readonly view: ViewSpec;
-  readonly onOpen: (jobId: string) => void;
-  readonly onPass: (jobId: string) => void;
-  readonly onFail: (jobId: string) => void;
+  readonly onToggleDone: (jobId: string) => void;
   readonly onSort: (field: SortField) => void;
 }
 
-export function JobTable({ jobs, pack, view, onOpen, onPass, onFail, onSort }: JobTableProps) {
+export function JobTable({ jobs, pack, view, onToggleDone, onSort }: JobTableProps) {
   // Two exclusions, both to stop a column appearing twice:
   //   - constant columns are shown once in the pack header, not 442 times
   //   - the columns already rendered as dedicated sortable fields (row number,
@@ -102,8 +100,6 @@ export function JobTable({ jobs, pack, view, onOpen, onPass, onFail, onSort }: J
                 </button>
               </th>
             ))}
-            <th scope="col">VERT</th>
-            <th scope="col">UP</th>
             <th scope="col">
               <button
                 type="button"
@@ -113,10 +109,8 @@ export function JobTable({ jobs, pack, view, onOpen, onPass, onFail, onSort }: J
                 STATUS {caret('status')}
               </button>
             </th>
-            <th scope="col">ACTIVATED</th>
-            <th scope="col">TESTED</th>
-            <th scope="col">COMPLETED</th>
-            <th scope="col">NOTES</th>
+            <th scope="col">DONE</th>
+            <th scope="col">SIGNED OFF</th>
             <th scope="col">
               <button
                 type="button"
@@ -134,15 +128,10 @@ export function JobTable({ jobs, pack, view, onOpen, onPass, onFail, onSort }: J
         <tbody>
           {jobs.map((job) => {
             const status = deriveStatus(job.progress);
-            const complete = currentGate(job.progress) === null;
             return (
               <tr key={job.id}>
                 <td class="mono">{job.seq}</td>
-                <td class="mono">
-                  <button type="button" onClick={() => onOpen(job.id)}>
-                    {job.jobNumber}
-                  </button>
-                </td>
+                <td class="mono">{job.jobNumber}</td>
                 <td class="mono">{formatBarPair(job.barPair)}</td>
                 <td>{JOB_TYPE_LABELS[job.jobType]}</td>
                 {sourceColumns.map((column) => (
@@ -150,35 +139,22 @@ export function JobTable({ jobs, pack, view, onOpen, onPass, onFail, onSort }: J
                     {job.source[column]}
                   </td>
                 ))}
-                <td class="mono">{job.progress.vert ?? ''}</td>
-                <td class="mono">{job.progress.up ?? ''}</td>
                 <td>
                   <span class={`status status--${status}`}>{STATUS_LABELS[status]}</span>
                 </td>
-                <td class="mono">{formatStampSmart(job.progress.activatedAt)}</td>
-                <td class="mono">{formatStampSmart(job.progress.testedAt)}</td>
-                <td class="mono">{formatStampSmart(job.progress.completedAt)}</td>
-                <td>{job.progress.notes}</td>
+                <td class="mono">{formatStampSmart(job.progress.doneAt)}</td>
+                <td class="mono">{formatStampSmart(job.progress.signedOffAt)}</td>
                 <td class="mono">{formatStampSmart(job.progress.updatedAt)}</td>
                 <td>
                   <div class="table__actions">
                     <button
                       type="button"
-                      class="table__mark mark--pass"
-                      disabled={job.progress.locked || complete}
-                      onClick={() => onPass(job.id)}
-                      aria-label={`Pass job ${job.jobNumber}`}
+                      class={`table__mark mark--${status === 'outstanding' ? 'pass' : 'revert'}`}
+                      aria-pressed={job.progress.doneAt !== null}
+                      onClick={() => onToggleDone(job.id)}
+                      aria-label={`Mark job ${job.seq} ${job.progress.doneAt !== null ? 'not done' : 'done'}`}
                     >
                       <TickIcon size={18} />
-                    </button>
-                    <button
-                      type="button"
-                      class="table__mark mark--fail"
-                      disabled={job.progress.locked}
-                      onClick={() => onFail(job.id)}
-                      aria-label={`Fail job ${job.jobNumber}`}
-                    >
-                      <CrossIcon size={18} />
                     </button>
                   </div>
                 </td>

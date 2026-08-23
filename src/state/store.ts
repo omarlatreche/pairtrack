@@ -17,7 +17,6 @@ export type Screen =
   | { name: 'first-run' }
   | { name: 'lock' }
   | { name: 'list' }
-  | { name: 'detail'; jobId: string }
   | { name: 'import' }
   | { name: 'settings' };
 
