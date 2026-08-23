@@ -110,6 +110,36 @@ describe('batch sign-off is recoverable', () => {
     expect(getState().undo).toBeNull();
   });
 
+  it('leaves the session counter where it started after sign-off then undo', () => {
+    // Signing off is not new work: those jobs were counted when he ticked them.
+    // The forward action added 1 while undo subtracted one-per-job, so undoing
+    // a 3-job batch drove "3 done this session" to zero and the header lied
+    // about a morning's work.
+    toggleJobDone(jobs()[0]!.id);
+    toggleJobDone(jobs()[1]!.id);
+    toggleJobDone(jobs()[2]!.id);
+    const afterTicking = getState().session.changes;
+    expect(afterTicking).toBe(3);
+
+    signOffPending();
+    expect(getState().session.changes).toBe(3);
+
+    performUndo();
+    expect(getState().session.changes).toBe(3);
+  });
+
+  it('still counts backup pressure for a batch, one per job', () => {
+    // The session counter and backup pressure are different questions. Nothing
+    // new was done, but 3 records changed on disk and are not in any backup.
+    toggleJobDone(jobs()[0]!.id);
+    toggleJobDone(jobs()[1]!.id);
+    const before = getState().vault!.settings.changesSinceBackup;
+
+    signOffPending();
+
+    expect(getState().vault!.settings.changesSinceBackup).toBe(before + 2);
+  });
+
   it('signing off twice does not re-stamp the first batch', () => {
     toggleJobDone(jobs()[0]!.id);
     signOffPending();

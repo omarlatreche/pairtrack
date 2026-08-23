@@ -31,6 +31,16 @@ export interface UndoEntry {
    * not restore them anyway — it would discard the original done timestamps.
    */
   readonly previous: readonly Job[];
+  /**
+   * How many this action added to `session.changes`, so undo reverses exactly
+   * that and no more.
+   *
+   * It is not simply `previous.length`. Signing off a batch changes many jobs
+   * but is not new work — they were counted when he ticked them — so it counts
+   * zero. Deriving the reversal from the job count instead drove "3 done this
+   * session" to nothing when a 3-job batch was undone.
+   */
+  readonly countedChanges: number;
   readonly at: number;
 }
 
@@ -151,11 +161,23 @@ export function updateView(patch: Partial<ViewSpec>): void {
   updateSettings((current) => ({ ...current, view: { ...current.view, ...patch } }));
 }
 
-export function countChange(): void {
-  setState({ session: { ...state.session, changes: state.session.changes + 1 } });
+/** Work he did: counts towards both "done this session" and backup pressure. */
+export function countChange(jobs = 1): void {
+  setState({ session: { ...state.session, changes: state.session.changes + jobs } });
+  countBackupChange(jobs);
+}
+
+/**
+ * A persisted change that is NOT new work done — backup pressure only.
+ *
+ * Signing off is the case: nothing moved from not-done to done, but records
+ * changed on disk and are in no backup yet, which is a different question from
+ * how much he got through today.
+ */
+export function countBackupChange(jobs: number): void {
   commit((vault) => ({
     ...vault,
-    settings: { ...vault.settings, changesSinceBackup: vault.settings.changesSinceBackup + 1 },
+    settings: { ...vault.settings, changesSinceBackup: vault.settings.changesSinceBackup + jobs },
   }));
 }
 
@@ -185,7 +207,7 @@ export function performUndo(): void {
     undo: null,
     session: {
       ...state.session,
-      changes: Math.max(0, state.session.changes - entry.previous.length),
+      changes: Math.max(0, state.session.changes - entry.countedChanges),
     },
   });
   if (undoTimer !== null) clearTimeout(undoTimer);

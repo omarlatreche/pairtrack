@@ -10,6 +10,7 @@ import { isMalformedEquipment } from '../import/buildJobs';
 import { headerForRole } from '../import/columns';
 import {
   activePack,
+  countBackupChange,
   countChange,
   findJob,
   getState,
@@ -76,7 +77,7 @@ function applyChange(
   countChange();
   // Undo restores the whole job rather than applying an inverse: an inverse can
   // drift from the forward operation, a restore cannot.
-  offerUndo({ label, previous: [job] });
+  offerUndo({ label, previous: [job], countedChanges: 1 });
 
   if (options.advance !== false) {
     setState({ scrollToJobId: nextJobAfter(job.id) });
@@ -122,7 +123,9 @@ export function signOffPending(): number {
     });
   }
 
-  countChange();
+  // Backup pressure only: nothing moved from not-done to done here, so this
+  // must not inflate "done this session" — and undo must not deflate it.
+  countBackupChange(affected.length);
 
   // A batch is exactly where undo matters most: one tap changes every pending
   // job, and there is no way to put them back by hand — un-ticking and
@@ -131,6 +134,7 @@ export function signOffPending(): number {
   offerUndo({
     label: `Signed off ${affected.length} ${affected.length === 1 ? 'job' : 'jobs'}`,
     previous: affected,
+    countedChanges: 0,
   });
 
   haptic([30, 40]);
