@@ -78,8 +78,8 @@ describe('natural sort', () => {
 
 describe('bar pair parsing', () => {
   it('parses frame, block and numeric pair', () => {
-    const parsed = parseBarPair('01</BAR-PAIR redacted>');
-    expect(parsed).toEqual({ frame: '01', block: 'U', number: 9001, raw: '01</BAR-PAIR redacted>' });
+    const parsed = parseBarPair('01/U9001');
+    expect(parsed).toEqual({ frame: '01', block: 'U', number: 9001, raw: '01/U9001' });
   });
 
   it('parses the INTL block on frame 09', () => {
@@ -102,11 +102,11 @@ describe('bar pair parsing', () => {
 
   it('formats an unparseable pair as Unplaced', () => {
     expect(formatBarPair(null)).toBe('Unplaced');
-    expect(formatBarPair(parseBarPair('01</BAR-PAIR redacted>'))).toBe('01</BAR-PAIR redacted>');
+    expect(formatBarPair(parseBarPair('01/U9001'))).toBe('01/U9001');
   });
 
   it('groups by frame and block', () => {
-    expect(blockKey(parseBarPair('01</BAR-PAIR redacted>'))).toBe('01/N');
+    expect(blockKey(parseBarPair('01/N9002'))).toBe('01/N');
     expect(blockKey(null)).toBe('Unplaced');
   });
 });

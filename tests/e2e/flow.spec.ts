@@ -27,7 +27,7 @@ let packPath: string;
 
 test.beforeAll(() => {
   scratchDir = mkdtempSync(join(tmpdir(), 'pairtrack-e2e-'));
-  packPath = join(scratchDir, 'TEST-PACK <pack-no redacted> VC.xlsx');
+  packPath = join(scratchDir, 'TEST-PACK 100000 VC.xlsx');
   writeSyntheticPack(packPath, { rows: TOTAL_JOBS });
 });
 

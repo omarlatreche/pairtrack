@@ -84,7 +84,7 @@ export function writeSyntheticPack(outPath: string, options: PackOptions = {}) {
 
   const sheet = XLSX.utils.aoa_to_sheet(aoa);
   const workbook = XLSX.utils.book_new();
-  XLSX.utils.book_append_sheet(workbook, sheet, '<exchange redacted> - TEST');
+  XLSX.utils.book_append_sheet(workbook, sheet, 'Exchange - TEST');
 
   writeFileSync(outPath, XLSX.write(workbook, { type: 'buffer', bookType: 'xlsx' }));
   return { path: outPath, rows: total };

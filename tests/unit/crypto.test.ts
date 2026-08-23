@@ -53,7 +53,7 @@ describe('byte helpers', () => {
   });
 
   it('round-trips utf-8 including non-ASCII', () => {
-    const text = '<exchange redacted> — <exchange-code redacted> <pack-no redacted> · £ frame ✓';
+    const text = 'Exchange — CODE 100000 · £ frame ✓';
     expect(utf8Decode(utf8Encode(text))).toBe(text);
   });
 });

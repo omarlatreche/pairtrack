@@ -166,7 +166,7 @@ export async function syntheticWorkbookBytes(options: SyntheticOptions = {}): Pr
   ];
   const sheet = XLSX.utils.aoa_to_sheet(aoa);
   const workbook = XLSX.utils.book_new();
-  XLSX.utils.book_append_sheet(workbook, sheet, '<exchange redacted> - TEST');
+  XLSX.utils.book_append_sheet(workbook, sheet, 'Exchange - TEST');
 
   const out = XLSX.write(workbook, { type: 'array', bookType: 'xlsx' }) as ArrayBuffer;
   return out;

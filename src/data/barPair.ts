@@ -1,7 +1,7 @@
 /**
  * MDF BAR PAIR parsing — BRIEF §5, SCHEMA.md.
  *
- * Format: `<frame>/<block><number>`, e.g. `01</BAR-PAIR redacted>`, `09/INTL0021`.
+ * Format: `<frame>/<block><number>`, e.g. `01/U9001`, `09/INTL0021`.
  *
  * This is the field that makes frame-walk order possible, which is the single
  * highest-value transformation in the app: it turns "the order the office typed

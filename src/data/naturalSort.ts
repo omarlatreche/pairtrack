@@ -63,7 +63,7 @@ export function naturalCompare(a: string, b: string): number {
 /**
  * Normalise a value for search matching — BRIEF §7.5.
  *
- * Case- and separator-insensitive, so `<job-ref redacted>`, `<job-ref redacted>` and `<job-ref redacted>` all
+ * Case- and separator-insensitive, so `abc123`, `ABC 123` and `ABC-123` all
  * match the same job. Applied to both the haystack and the needle.
  */
 export function normaliseForSearch(value: string): string {

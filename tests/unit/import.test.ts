@@ -334,8 +334,8 @@ describe('merge on re-import', () => {
   });
 
   it('derives a readable pack name from a filename', () => {
-    expect(packNameFromFile('<project-no redacted>-<exchange redacted> - EXAMPLE <pack-no redacted> VC.xlsx')).toBe(
-      '<project-no redacted>-<exchange redacted> - EXAMPLE <pack-no redacted> VC',
+    expect(packNameFromFile('1234567-Exchange - EXAMPLE 100000 VC.xlsx')).toBe(
+      '1234567-Exchange - EXAMPLE 100000 VC',
     );
     expect(packNameFromFile('some_pack_name.xlsm')).toBe('some pack name');
   });

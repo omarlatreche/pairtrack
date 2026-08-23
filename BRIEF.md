@@ -305,7 +305,7 @@ Plus a second row for the derived dimensions, because they change how long a job
 `No ties (217) · E/D-side (222) · LLU (3)`, and `Frame 01 (415) · Frame 09 (26)`.
 
 Search: one box, matching partial **job number, circuit number, bar pair, tie refs,
-equipment and notes**. Case- and separator-insensitive — `<job-ref redacted>`, `<job-ref redacted>` and `123/4`
+equipment and notes**. Case- and separator-insensitive — `abc123`, `ABC 123` and `123/4`
 must all find the same job, and a circuit number must match whether or not he types the
 leading `0`. Searching by circuit number is how the office will identify a job to him
 over the phone, so it has to work first time. Debounce 120ms, no more.
