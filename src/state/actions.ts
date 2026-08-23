@@ -4,7 +4,6 @@
  */
 import { parseBarPair } from '../data/barPair';
 import { signOff, toggleDone } from '../data/transitions';
-import { applyView } from '../data/view';
 import type { HistoryEntry, Job, JobProgress } from '../data/types';
 import { isMalformedEquipment } from '../import/buildJobs';
 import { headerForRole } from '../import/columns';
@@ -15,7 +14,6 @@ import {
   findJob,
   getState,
   offerUndo,
-  setState,
   updateJob,
 } from './store';
 
@@ -44,34 +42,11 @@ function engineerName(): string | null {
   return name === '' ? null : name;
 }
 
-/**
- * The job that follows `jobId` in the current sort order.
- *
- * Auto-advance: after marking, this one is scrolled to the top so he never
- * hunts for his place (BRIEF §7.3).
- */
-function nextJobAfter(jobId: string): string | null {
-  const pack = activePack();
-  const view = getState().vault?.settings.view;
-  if (pack === null || view === undefined) return null;
-
-  const { jobs } = applyView(pack.jobs, view, headerForRole(pack.columnMapping, 'oldEquipment'));
-  const index = jobs.findIndex((job) => job.id === jobId);
-  if (index === -1) return null;
-  return jobs[index + 1]?.id ?? null;
-}
-
-export interface MarkOptions {
-  /** false on the detail screen — marking there should not scroll the list. */
-  readonly advance?: boolean;
-}
-
 function applyChange(
   job: Job,
   progress: JobProgress,
   history: HistoryEntry[],
   label: string,
-  options: MarkOptions,
 ): void {
   updateJob(job.id, (current) => ({ ...current, progress, history }));
   countChange();
@@ -79,9 +54,6 @@ function applyChange(
   // drift from the forward operation, a restore cannot.
   offerUndo({ label, previous: [job], countedChanges: 1 });
 
-  if (options.advance !== false) {
-    setState({ scrollToJobId: nextJobAfter(job.id) });
-  }
 }
 
 /**
@@ -90,14 +62,14 @@ function applyChange(
  * He tapped through three gates before and said it was too complicated. One tap
  * on the card marks the job done and stamps the time; tapping again undoes it.
  */
-export function toggleJobDone(jobId: string, options: MarkOptions = {}): void {
+export function toggleJobDone(jobId: string): void {
   const job = findJob(jobId);
   if (job === null) return;
 
   const wasDone = job.progress.doneAt !== null;
   const change = toggleDone(job, nowIso(), engineerName());
 
-  applyChange(job, change.progress, [], change.label, options);
+  applyChange(job, change.progress, [], change.label);
   // Un-ticking feels different from ticking without having to look.
   haptic(wasDone ? 20 : 40);
 }

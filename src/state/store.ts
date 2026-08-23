@@ -58,8 +58,6 @@ export interface AppState {
   error: string | null;
   undo: UndoEntry | null;
   session: SessionStats;
-  /** Job to scroll to the top after a mark — auto-advance (BRIEF §7.3). */
-  scrollToJobId: string | null;
   /** A service-worker update is waiting. */
   updateReady: boolean;
 }
@@ -71,7 +69,6 @@ const initialState: AppState = {
   error: null,
   undo: null,
   session: { changes: 0, startedAt: Date.now() },
-  scrollToJobId: null,
   updateReady: false,
 };
 

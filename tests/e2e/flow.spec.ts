@@ -355,7 +355,13 @@ test('a malformed row is flagged and correctable in the app', async ({ page }) =
 
   // Corrected: it now has a real frame position and the flag is gone.
   await page.getByRole('button', { name: /^All/ }).click();
+
+  // Search rather than scan the DOM: the list is virtualised, and now that the
+  // window actually follows the scroll, a corrected row sorts into its real
+  // frame position and is simply not rendered until you go to it.
+  await page.getByLabel('Search jobs').fill('01/Z1234');
   await expect(page.locator('.tag--position', { hasText: '01/Z1234' })).toHaveCount(1);
+  await page.getByLabel('Search jobs').fill('');
 
   // One of the two flagged rows is repaired, so the attention filter now holds
   // only the other one (a malformed old-equipment ref, which this did not fix).

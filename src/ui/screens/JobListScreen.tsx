@@ -60,19 +60,20 @@ export function JobListScreen({ state }: { state: AppState }) {
   // back to the top is the only honest response — anything else drops him
   // somewhere arbitrary, which is the opposite of "never hunt for your place".
   useEffect(() => {
-    scroller.current?.scrollTo({ top: 0 });
+    // The page is the scroller, not `.list` — see VirtualList.
+    window.scrollTo({ top: 0 });
   }, [view?.sortField, view?.sortDirection, view?.group]);
 
-  // Auto-advance: bring the next job in the current sort order to the top so he
-  // never hunts for his place (BRIEF §7.3).
-  useEffect(() => {
-    const target = state.scrollToJobId;
-    if (target === null) return;
-
-    const element = document.querySelector<HTMLElement>(`[data-job-id="${CSS.escape(target)}"]`);
-    element?.scrollIntoView({ block: 'start', behavior: 'smooth' });
-    setState({ scrollToJobId: null });
-  }, [state.scrollToJobId]);
+  /*
+   * There is deliberately no auto-scroll after a tap (D17).
+   *
+   * The old three-gate model moved a job out of the filtered list when it was
+   * marked, so the list was scrolled to keep his place. One tap now just turns
+   * the card blue and leaves it where it is — and when he is filtered to Not
+   * done, the ticked job leaves the list and the next one takes its position on
+   * its own. Scrolling on top of that only moved the list under his thumb,
+   * which is what he reported.
+   */
 
   if (pack === null || view === undefined || counts === null) {
     return (
@@ -219,22 +220,6 @@ export function JobListScreen({ state }: { state: AppState }) {
       </div>
 
       <div class="list list--cards" ref={scroller}>
-        {/*
-          Inside the scroller, not above it: sticky to the page would slide
-          under the fixed header and be invisible while still being in the DOM.
-        */}
-        {pendingCount > 0 && (
-          <div class="signoff" role="status">
-            <span class="signoff__count">{pendingCount} done, not signed off</span>
-            <button
-              type="button"
-              class="button button--primary signoff__button"
-              onClick={() => signOffPending()}
-            >
-              Sign off all {pendingCount}
-            </button>
-          </div>
-        )}
         {jobs.length === 0 && (
           <div class="empty">
             <p class="empty__title">Nothing matches</p>
@@ -246,7 +231,6 @@ export function JobListScreen({ state }: { state: AppState }) {
           <VirtualList
             items={jobs}
             keyFor={(job) => job.id}
-            scrollRef={scroller}
             renderItem={(job) => (
               <div data-job-id={job.id}>
                 <JobCard job={job} columns={columns} onToggleDone={toggleJobDone} />
@@ -271,6 +255,29 @@ export function JobListScreen({ state }: { state: AppState }) {
           ))
         )}
       </div>
+
+      {/*
+        Rendered AFTER the list, never inside it.
+        
+        It is `position: fixed`, so its place in the DOM is cosmetic — but it
+        used to sit as the first child of `.list`, directly before VirtualList.
+        Appearing on the first tap inserted a sibling ahead of the list, Preact
+        reconciles children by position, and VirtualList REMOUNTED with its
+        window reset to row 0. That is what threw him back up a 442-row list
+        every time he ticked a job.
+      */}
+      {pendingCount > 0 && (
+        <div class="signoff" role="status">
+          <span class="signoff__count">{pendingCount} done, not signed off</span>
+          <button
+            type="button"
+            class="button button--primary signoff__button"
+            onClick={() => signOffPending()}
+          >
+            Sign off all {pendingCount}
+          </button>
+        </div>
+      )}
 
       {/* Desktop review only. Same store, same actions. */}
       <JobTable
