@@ -411,8 +411,12 @@ describe('re-keying is atomic and exclusive', () => {
     const stored = await loadMeta();
     await unlock(NEW_PASSPHRASE, stored!);
 
+    // Assert the NEWEST state survived, not merely that something did. This
+    // used to be `toBeGreaterThan(0)`, which passes even when the re-key writes
+    // its older snapshot over the save that followed it — the exact regression
+    // the test exists to catch.
     const loaded = await loadVault();
-    expect(loaded?.packs[0]?.jobs.length).toBeGreaterThan(0);
+    expect(loaded?.packs[0]?.jobs).toHaveLength(14);
   }, 120_000);
 
   async function loadMetaOrCreate() {
@@ -475,4 +479,124 @@ describe('flushSave reports failure instead of swallowing it', () => {
     lock();
     expect(hasPendingSave()).toBe(false);
   });
+});
+
+describe('regressions: key adoption and snapshot ordering', () => {
+  it('a failed re-key does not adopt the new key, so the old passphrase still works', async () => {
+    // The worst failure the app can have (D13), approached from the write side.
+    // If the key is adopted before the write is known to have landed, the live
+    // key ends up with no verifier on disk: the old passphrase then passes the
+    // verifier and decrypts nothing, the new one fails the verifier, and there
+    // is no reset.
+    const { deriveNewVault, requireKey } = await import('../../src/crypto/vault');
+    const { rekeyVault } = await import('../../src/data/repository');
+
+    await saveVault(vaultWith(makePack(10)));
+    const keyBefore = requireKey();
+
+    const { meta, key } = await deriveNewVault('an entirely different passphrase');
+
+    // Break the database underneath the write, the same shape as a quota error.
+    const workingIndexedDB = globalThis.indexedDB;
+    __resetDbForTests();
+    globalThis.indexedDB = {
+      open() {
+        const request: Record<string, unknown> = { error: new Error('storage unavailable') };
+        queueMicrotask(() => {
+          (request.onerror as ((e: unknown) => void) | undefined)?.({ target: request });
+        });
+        return request;
+      },
+    } as unknown as IDBFactory;
+
+    await expect(rekeyVault(vaultWith(makePack(10)), key, meta)).rejects.toBeDefined();
+
+    // The session key must be untouched.
+    expect(requireKey()).toBe(keyBefore);
+
+    globalThis.indexedDB = workingIndexedDB;
+    __resetDbForTests();
+
+    // And it must still be the key that opens what is actually on disk.
+    const loaded = await loadVault();
+    expect(loaded?.packs[0]?.jobs).toHaveLength(10);
+  }, 120_000);
+
+  it('restoring a backup that cannot be persisted leaves the current vault open', async () => {
+    // Restore is the recovery path — it runs when he is already in trouble, so
+    // a failure here must not be the thing that finishes the job off.
+    const { createBackup } = await import('../../src/export/backup');
+    const { restoreFromBackupText } = await import('../../src/data/restore');
+    const { requireKey } = await import('../../src/crypto/vault');
+
+    await saveVault(vaultWith(makePack(10)));
+    const keyBefore = requireKey();
+
+    const BACKUP_PASSPHRASE = 'the backup had its own passphrase';
+    const backupBlob = await createBackup(vaultWith(makePack(7)), BACKUP_PASSPHRASE);
+    // jsdom's Blob implements neither .text() nor .arrayBuffer(); FileReader it is.
+    const backupText = await new Promise<string>((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = () => resolve(String(reader.result));
+      reader.onerror = () => reject(reader.error);
+      reader.readAsText(backupBlob);
+    });
+
+    const workingIndexedDB = globalThis.indexedDB;
+    __resetDbForTests();
+    globalThis.indexedDB = {
+      open() {
+        const request: Record<string, unknown> = { error: new Error('storage unavailable') };
+        queueMicrotask(() => {
+          (request.onerror as ((e: unknown) => void) | undefined)?.({ target: request });
+        });
+        return request;
+      },
+    } as unknown as IDBFactory;
+
+    await expect(restoreFromBackupText(backupText, BACKUP_PASSPHRASE)).rejects.toBeDefined();
+
+    // The backup's passphrase must NOT have become the live key.
+    expect(requireKey()).toBe(keyBefore);
+
+    globalThis.indexedDB = workingIndexedDB;
+    __resetDbForTests();
+
+    const loaded = await loadVault();
+    expect(loaded?.packs[0]?.jobs).toHaveLength(10);
+  }, 120_000);
+
+  it('a passphrase change re-encrypts the state that exists AFTER the flush', async () => {
+    // The snapshot used to be taken before the flush. The flush then wrote the
+    // newest state and the re-key wrote the older snapshot back over it, so a
+    // tick made during the flush stayed on screen and in memory but never
+    // reached disk — found only on the next unlock, a day later.
+    const { changePassphrase } = await import('../../src/data/changePassphrase');
+
+    // beforeEach creates a vault but does not persist its meta, and this test
+    // has to unlock from disk at the end.
+    lock();
+    __resetThrottleForTests();
+    const firstMeta = await createVault(PASSPHRASE);
+    await saveVault(vaultWith(makePack(10)));
+    await saveMeta(firstMeta);
+
+    // A tick sitting in the 500ms debounce, exactly as one would be.
+    queueSave(vaultWith(makePack(14)));
+
+    // Stands in for the live store: while the repository still holds a pending
+    // write, the caller's view is the stale one. Snapshot before the flush and
+    // this returns 10; snapshot after it and it returns 14.
+    const readVault = () => vaultWith(makePack(hasPendingSave() ? 10 : 14));
+
+    const NEW_PASSPHRASE = 'a brand new and quite long passphrase';
+    await changePassphrase(NEW_PASSPHRASE, readVault);
+
+    lock();
+    __resetThrottleForTests();
+    await unlock(NEW_PASSPHRASE, (await loadMeta())!);
+
+    const loaded = await loadVault();
+    expect(loaded?.packs[0]?.jobs).toHaveLength(14);
+  }, 120_000);
 });

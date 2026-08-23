@@ -13,7 +13,7 @@
  * passphrase that encrypted the backup and writes the vault and its new
  * verifier together, re-establishing the installation from the backup alone.
  */
-import { createVault, requireKey } from '../crypto/vault';
+import { deriveNewVault } from '../crypto/vault';
 import { parseBackup, restoreBackup } from '../export/backup';
 import { migrate, rekeyVault } from './repository';
 import type { Vault } from './types';
@@ -34,10 +34,17 @@ export async function restoreFromBackupText(text: string, passphrase: string): P
   // anything on this device is touched.
   const restored = migrate(await restoreBackup(file, passphrase));
 
-  // A fresh salt and verifier for this device. createVault installs the derived
-  // key as the session key, so requireKey() is that key.
-  const meta = await createVault(passphrase);
-  await rekeyVault(restored, requireKey(), meta);
+  // A fresh salt and verifier for this device.
+  //
+  // Derive WITHOUT adopting. `rekeyVault` writes the blob and the meta in one
+  // transaction and only then adopts the key, inside the same critical section.
+  // So if the write fails, the session key is untouched: a vault that was open
+  // stays open under its old key, and one that was locked stays locked. This
+  // used to call createVault, which adopted the key first — and a failed write
+  // then left the live key with no verifier on disk, which is the one failure
+  // that locks him out of his own week's work with no reset (D13).
+  const { meta, key } = await deriveNewVault(passphrase);
+  await rekeyVault(restored, key, meta);
 
   return restored;
 }

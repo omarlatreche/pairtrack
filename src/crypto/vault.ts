@@ -60,22 +60,55 @@ export function requireKey(): CryptoKey {
   return sessionKey;
 }
 
-/** Create a brand-new vault. Returns the meta to persist. */
-export async function createVault(passphrase: string): Promise<VaultMeta> {
+/**
+ * Derive a fresh salt, key and verifier for a brand-new vault WITHOUT touching
+ * the session key.
+ *
+ * Split out from `createVault` because restore needs the derivation without the
+ * adoption. Restoring used to call `createVault`, which installed the new key
+ * immediately, and only then attempted the write. If that write failed, the old
+ * vault and old verifier were still on disk while the live key was the new one:
+ * the next ordinary save would seal the blob under a key whose verifier had
+ * never been persisted, and then the old passphrase would pass the verifier and
+ * decrypt nothing while the new one failed the verifier outright. Neither
+ * passphrase opens it — the exact failure D13 exists to prevent, reached
+ * through the recovery path, which is the worst possible place for it.
+ *
+ * Callers that must not lose the current key on failure derive here and let
+ * `rekeyVault` adopt inside its critical section, once the write has landed.
+ */
+export async function deriveNewVault(
+  passphrase: string,
+): Promise<{ meta: VaultMeta; key: CryptoKey }> {
   const salt = generateSalt();
   const key = await deriveKeyInWorker(passphrase, salt, CURRENT_KDF_PARAMS);
   const verifier = await createVerifier(key);
+
+  return {
+    key,
+    meta: {
+      kdf: CURRENT_KDF_PARAMS,
+      salt,
+      verifier,
+      createdAt: new Date().toISOString(),
+    },
+  };
+}
+
+/**
+ * Create a brand-new vault and adopt its key. Returns the meta to persist.
+ *
+ * Adopting up front is correct HERE and only here: first run has no existing
+ * vault, so a failed write leaves nothing to be locked out of.
+ */
+export async function createVault(passphrase: string): Promise<VaultMeta> {
+  const { meta, key } = await deriveNewVault(passphrase);
 
   sessionKey = key;
   unlockedAt = Date.now();
   emit('unlocked');
 
-  return {
-    kdf: CURRENT_KDF_PARAMS,
-    salt,
-    verifier,
-    createdAt: new Date().toISOString(),
-  };
+  return meta;
 }
 
 // --- Unlock throttling (BRIEF §9.4) -----------------------------------------

@@ -7,9 +7,10 @@
 import { useState } from 'preact/hooks';
 import { MAX_IDLE_MINUTES, MIN_IDLE_MINUTES } from '../../crypto/autolock';
 import { assessPassphrase, MIN_PASSPHRASE_LENGTH } from '../../crypto/passphrase';
-import { lock, rederiveForNewPassphrase } from '../../crypto/vault';
+import { lock } from '../../crypto/vault';
+import { changePassphrase as runChangePassphrase } from '../../data/changePassphrase';
 import { slugifyReason } from '../../data/failReasons';
-import { flushSave, rekeyVault, wipeEverything } from '../../data/repository';
+import { flushSave, wipeEverything } from '../../data/repository';
 import { restoreFromBackupText } from '../../data/restore';
 import { commit, getState, setState, updateSettings, type AppState } from '../../state/store';
 import { formatStamp } from '../components/format';
@@ -43,25 +44,10 @@ export function SettingsScreen({ state }: { state: AppState }) {
     setBusy('Changing passphrase');
     setError(null);
     try {
-      // The blob and the verifier must land in ONE transaction. Written
-      // separately, a crash in between leaves data encrypted under the new key
-      // beside a verifier for the old passphrase — and then NEITHER passphrase
-      // opens it, with no reset and no way for the app to explain why.
-      const { meta, key } = await rederiveForNewPassphrase(newPass);
-      const current = getState().vault;
-      if (current === null) throw new Error('Locked');
-
-      // Anything still sitting in the debounce belongs to the old key; get it
-      // written before the key changes underneath it.
-      await flushSave();
-
-      // rekeyVault writes the blob and the verifier in one transaction AND
-      // adopts the key inside the same slot of the write queue. Doing those as
-      // separate steps left a window: re-keying awaits 600k PBKDF2 iterations
-      // and then IndexedDB, the UI stays live throughout, and a debounced save
-      // firing in the middle would seal with the still-current OLD key and land
-      // after the new verifier. Neither passphrase would open the result.
-      await rekeyVault(current, key, meta);
+      // Derive, flush, snapshot, then write blob and verifier in ONE
+      // transaction. The order matters more than any single step and it lives
+      // in src/data/changePassphrase.ts, where it has its own regression tests.
+      await runChangePassphrase(newPass, () => getState().vault);
 
       setNewPass('');
       setNewPassConfirm('');
