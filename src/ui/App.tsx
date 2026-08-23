@@ -247,7 +247,8 @@ export function App() {
       {state.undo !== null && (
         <div class="toast" role="status">
           <span class="toast__text">
-            {state.undo.label} · job {state.undo.previous.seq}
+            {state.undo.label}
+            {state.undo.previous.length === 1 ? ` · job ${state.undo.previous[0]?.seq}` : ''}
           </span>
           <button type="button" class="toast__undo" onClick={performUndo}>
             <UndoIcon size={18} />

@@ -22,9 +22,15 @@ export type Screen =
 
 export interface UndoEntry {
   readonly label: string;
-  readonly jobId: string;
-  /** The job exactly as it was, so undo is a restore rather than an inverse. */
-  readonly previous: Job;
+  /**
+   * The jobs exactly as they were, so undo is a restore rather than an inverse.
+   *
+   * A list rather than one job because signing off is a BATCH: it changes every
+   * pending job at once, and an action that touches 200 rows in a single tap
+   * needs to be reversible in a single tap too. Un-ticking them by hand would
+   * not restore them anyway — it would discard the original done timestamps.
+   */
+  readonly previous: readonly Job[];
   readonly at: number;
 }
 
@@ -172,12 +178,15 @@ export function performUndo(): void {
   const entry = state.undo;
   if (entry === null) return;
 
-  // Restore the whole job, not an inverse operation: an inverse can drift from
-  // the forward operation, a restore cannot.
-  updateJob(entry.jobId, () => entry.previous);
+  // Restore whole jobs, not an inverse operation: an inverse can drift from the
+  // forward operation, a restore cannot.
+  for (const job of entry.previous) updateJob(job.id, () => job);
   setState({
     undo: null,
-    session: { ...state.session, changes: Math.max(0, state.session.changes - 1) },
+    session: {
+      ...state.session,
+      changes: Math.max(0, state.session.changes - entry.previous.length),
+    },
   });
   if (undoTimer !== null) clearTimeout(undoTimer);
 }

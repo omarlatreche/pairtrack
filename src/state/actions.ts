@@ -76,7 +76,7 @@ function applyChange(
   countChange();
   // Undo restores the whole job rather than applying an inverse: an inverse can
   // drift from the forward operation, a restore cannot.
-  offerUndo({ label, jobId: job.id, previous: job });
+  offerUndo({ label, previous: [job] });
 
   if (options.advance !== false) {
     setState({ scrollToJobId: nextJobAfter(job.id) });
@@ -112,19 +112,29 @@ export function signOffPending(): number {
   if (pack === null) return 0;
 
   const now = nowIso();
-  const ids = pack.jobs.filter((j) => signOff(j.progress, now) !== null).map((j) => j.id);
-  if (ids.length === 0) return 0;
+  const affected = pack.jobs.filter((j) => signOff(j.progress, now) !== null);
+  if (affected.length === 0) return 0;
 
-  for (const id of ids) {
-    updateJob(id, (job) => {
-      const progress = signOff(job.progress, now);
-      return progress === null ? job : { ...job, progress };
+  for (const job of affected) {
+    updateJob(job.id, (current) => {
+      const progress = signOff(current.progress, now);
+      return progress === null ? current : { ...current, progress };
     });
   }
 
   countChange();
+
+  // A batch is exactly where undo matters most: one tap changes every pending
+  // job, and there is no way to put them back by hand — un-ticking and
+  // re-ticking would discard the original done timestamps, which are the times
+  // the work actually happened. The snapshot restores them intact.
+  offerUndo({
+    label: `Signed off ${affected.length} ${affected.length === 1 ? 'job' : 'jobs'}`,
+    previous: affected,
+  });
+
   haptic([30, 40]);
-  return ids.length;
+  return affected.length;
 }
 
 export function setCompletedBy(jobId: string, completedBy: string): void {

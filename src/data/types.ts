@@ -160,7 +160,7 @@ export interface ViewSpec {
   search: string;
 }
 
-export const SCHEMA_VERSION = 1;
+export const SCHEMA_VERSION = 2;
 
 export const DEFAULT_VIEW: ViewSpec = {
   // Frame-walk order is the default (D7): the list should follow his feet,

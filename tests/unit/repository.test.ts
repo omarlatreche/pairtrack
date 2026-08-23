@@ -601,3 +601,136 @@ describe('regressions: key adoption and snapshot ordering', () => {
     expect(loaded?.packs[0]?.jobs).toHaveLength(14);
   }, 120_000);
 });
+
+describe('v1 -> v2 migration of an existing vault', () => {
+  /**
+   * The EXACT persisted shape of the previous release, written out rather than
+   * imported: the old types no longer exist, and a migration test that uses the
+   * new types cannot fail the way a real old vault does.
+   */
+  function v1Progress(over: Record<string, unknown> = {}): Record<string, unknown> {
+    return {
+      readyToActivate: null,
+      activatedAt: null,
+      testStatus: null,
+      testedAt: null,
+      completedAt: null,
+      completedBy: null,
+      failReason: null,
+      vert: null,
+      up: null,
+      notes: '',
+      locked: false,
+      updatedAt: NOW,
+      ...over,
+    };
+  }
+
+  function v1Vault(progresses: Record<string, unknown>[]): unknown {
+    const pack = makePack(progresses.length);
+    return {
+      schemaVersion: 1,
+      activePackId: pack.id,
+      packs: [
+        {
+          ...pack,
+          jobs: pack.jobs.map((job, i) => ({ ...job, progress: progresses[i], history: [] })),
+        },
+      ],
+      settings: {
+        engineerName: 'Old',
+        autoLockMinutes: 5,
+        theme: 'dark',
+        failReasons: [{ code: 'bar-pair-not-as-documented', label: 'Bar pair wrong', enabled: true }],
+        view: { sortField: 'framePosition', sortDirection: 'asc', group: 'none', status: 'activated', jobType: null, frame: null, search: '' },
+        changesSinceBackup: 0,
+        lastBackupAt: null,
+      },
+    };
+  }
+
+  it('does not report untouched jobs as signed off', async () => {
+    // The bug: signedOffAt is absent on a v1 job, and `undefined !== null` is
+    // true, so deriveStatus called EVERY job signed off. A returning engineer
+    // would open a fresh pack and be told all 442 were finished.
+    const { migrate } = await import('../../src/data/repository');
+    const { deriveStatus } = await import('../../src/data/transitions');
+
+    const migrated = migrate(v1Vault([v1Progress(), v1Progress()]) as never);
+
+    for (const job of migrated.packs[0]!.jobs) {
+      expect(job.progress.signedOffAt).toBeNull();
+      expect(deriveStatus(job.progress)).toBe('outstanding');
+    }
+  });
+
+  it('carries a finished job across as done, awaiting sign-off', async () => {
+    const { migrate } = await import('../../src/data/repository');
+    const { deriveStatus } = await import('../../src/data/transitions');
+
+    const migrated = migrate(
+      v1Vault([
+        v1Progress({
+          readyToActivate: 'yes',
+          activatedAt: NOW,
+          testStatus: 'pass',
+          testedAt: NOW,
+          completedAt: NOW,
+          completedBy: 'Old Engineer',
+        }),
+      ]) as never,
+    );
+
+    const progress = migrated.packs[0]!.jobs[0]!.progress;
+    expect(progress.doneAt).toBe(NOW);
+    expect(progress.completedBy).toBe('Old Engineer');
+    // Sign-off did not exist in v1, so it cannot be asserted on his behalf.
+    expect(progress.signedOffAt).toBeNull();
+    expect(deriveStatus(progress)).toBe('pending');
+  });
+
+  it('does not claim a part-finished job is done', async () => {
+    // Under-claiming is the safe direction. Marking a half-done job "done"
+    // means he skips it and a circuit never moves; marking a done job
+    // "not done" costs him one re-check at the frame.
+    const { migrate } = await import('../../src/data/repository');
+    const { deriveStatus } = await import('../../src/data/transitions');
+
+    const migrated = migrate(
+      v1Vault([
+        v1Progress({ readyToActivate: 'yes', activatedAt: NOW }),
+        v1Progress({ readyToActivate: 'failed', activatedAt: NOW, failReason: 'x' }),
+      ]) as never,
+    );
+
+    for (const job of migrated.packs[0]!.jobs) {
+      expect(deriveStatus(job.progress)).toBe('outstanding');
+      expect(job.progress.doneAt).toBeNull();
+    }
+  });
+
+  it('drops v1 fields rather than carrying them along as dead weight', async () => {
+    const { migrate } = await import('../../src/data/repository');
+    const migrated = migrate(v1Vault([v1Progress({ notes: 'old note', locked: true })]) as never);
+
+    const progress = migrated.packs[0]!.jobs[0]!.progress as unknown as Record<string, unknown>;
+    for (const gone of ['readyToActivate', 'testStatus', 'notes', 'locked', 'vert', 'up']) {
+      expect(progress[gone]).toBeUndefined();
+    }
+  });
+
+  it('resets a status filter that no longer exists, instead of showing nothing', async () => {
+    // settings.view.status persisted as 'activated'. Left alone it matches no
+    // job, so the app opens on an empty list and looks broken.
+    const { migrate } = await import('../../src/data/repository');
+    const migrated = migrate(v1Vault([v1Progress()]) as never);
+    expect(migrated.settings.view.status).toBe('all');
+  });
+
+  it('stamps the new schema version', async () => {
+    const { migrate } = await import('../../src/data/repository');
+    const { SCHEMA_VERSION } = await import('../../src/data/types');
+    expect(migrate(v1Vault([v1Progress()]) as never).schemaVersion).toBe(SCHEMA_VERSION);
+    expect(SCHEMA_VERSION).toBeGreaterThanOrEqual(2);
+  });
+});

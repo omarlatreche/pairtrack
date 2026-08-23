@@ -111,21 +111,65 @@ const SHAPED = [
   { name: 'MDF bar pair', re: /\b0[19]\/(?:[A-Wa-w]|INTL)\d{1,4}\b/g },
 ];
 
+/**
+ * Track commit and file while walking the patch, so a hit can be located
+ * without quoting it.
+ *
+ * The value itself is deliberately NOT reported. CI runs this on a public
+ * repository, where Actions logs are world-readable — printing the identifier
+ * the scan just caught would republish the very thing it exists to keep out,
+ * into a second public place that outlives the fix.
+ */
 const unknown = new Map();
+let commit = '';
+let file = '';
+
 for (const line of patch.split('\n')) {
+  const commitLine = /^commit ([0-9a-f]{40})$/.exec(line);
+  if (commitLine !== null) {
+    commit = commitLine[1].slice(0, 10);
+    continue;
+  }
+  const fileLine = /^\+\+\+ b\/(.+)$/.exec(line);
+  if (fileLine !== null) {
+    file = fileLine[1];
+    continue;
+  }
   if (!line.startsWith('+')) continue;
+
   for (const { name, re } of SHAPED) {
     for (const match of line.match(re) ?? []) {
       if (ALLOWED_FABRICATED.has(match)) continue;
-      if (!unknown.has(match)) unknown.set(match, name);
+      // Keyed by value so each distinct one is counted once — the key is used
+      // for counting only and is never printed.
+      if (!unknown.has(match)) unknown.set(match, { name, commit, file, count: 0 });
+      unknown.get(match).count += 1;
     }
   }
 }
-for (const [value, name] of unknown) {
+
+const byLocation = new Map();
+for (const { name, commit: c, file: f, count } of unknown.values()) {
+  const key = `${name}|${c}|${f}`;
+  byLocation.set(key, (byLocation.get(key) ?? 0) + count);
+}
+
+for (const [key, count] of byLocation) {
+  const [name, c, f] = key.split('|');
   problems.push(
-    `history contains an unrecognised ${name}: "${value}" — ` +
-      'if it is invented, add it to ALLOWED_FABRICATED in this file',
+    `${count} unrecognised ${name}${count === 1 ? '' : 's'} in ${c} ${f} — ` +
+      'the value is not printed here on purpose; run ' +
+      '`node scripts/scan-history.mjs --show` locally to see it, then either ' +
+      'purge it or add it to ALLOWED_FABRICATED in this file',
   );
+}
+
+// Local-only escape hatch. Never pass this in CI.
+if (process.argv.includes('--show') && unknown.size > 0) {
+  console.error('\n  Local-only listing (do NOT paste this into an issue or a log):');
+  for (const [value, { name, commit: c, file: f }] of unknown) {
+    console.error(`    ${name}  ${c}  ${f}  ->  ${value}`);
+  }
 }
 
 if (problems.length > 0) {

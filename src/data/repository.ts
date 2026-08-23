@@ -15,7 +15,7 @@ import { decryptJson, encryptJson, type Sealed } from '../crypto/cipher';
 import { adoptKey, onLockStateChange, requireKey } from '../crypto/vault';
 import type { VaultMeta } from '../crypto/vault';
 import { SNAPSHOT_RING_SIZE } from '../crypto/params';
-import { DEFAULT_VIEW, SCHEMA_VERSION, type Settings, type Vault } from './types';
+import { DEFAULT_VIEW, SCHEMA_VERSION, type JobProgress, type Settings, type Vault } from './types';
 
 const DB_NAME = 'pairtrack';
 const DB_VERSION = 1;
@@ -431,15 +431,95 @@ export function __resetDbForTests(): void {
  * Defensive rather than clever: fill in anything a newer version added, so an
  * old blob never crashes the app on launch.
  */
+/** Every status filter v2 understands. Anything else is a v1 leftover. */
+const KNOWN_STATUS_FILTERS = new Set(['all', 'outstanding', 'pending', 'signed-off', 'attention']);
+
+/**
+ * v1 job progress, exactly as the previous release persisted it.
+ *
+ * Declared here rather than kept in `types.ts`: it is a description of what is
+ * on disk, not a shape anything should still be written in.
+ */
+interface V1Progress {
+  readyToActivate?: null | 'yes' | 'failed';
+  activatedAt?: string | null;
+  testStatus?: null | 'pass' | 'fail';
+  testedAt?: string | null;
+  completedAt?: string | null;
+  completedBy?: string | null;
+  updatedAt?: string;
+}
+
+/**
+ * Convert one job's progress from v1 to v2 — D17.
+ *
+ * Why this has to exist: v2 replaced `JobProgress` wholesale, and
+ * `deriveStatus` reads `signedOffAt !== null`. On a v1 record that field is
+ * absent, `undefined !== null` is **true**, and every job in an existing vault
+ * reads as signed off. A returning engineer would open a week's work and be
+ * told all 442 were finished. It affects installed PWAs and every `.ptbak`
+ * backup, so it cannot be waved through as "old data".
+ *
+ * **The conversion deliberately under-claims.** Only a job that reached
+ * `completedAt` in v1 becomes done. A part-finished job — activated, or tested
+ * but not completed — comes across as NOT done.
+ *
+ * That direction is chosen on consequence, not on tidiness. Over-claiming means
+ * he skips a job he never finished and a circuit stays on the old shelf through
+ * the cutover, which a customer notices. Under-claiming costs him one re-check
+ * at the frame. The cheap mistake is the one to make.
+ *
+ * v1's `failed` state has no v2 equivalent and becomes not-done, which is what
+ * it always meant in practice: the job still needs doing.
+ *
+ * Sign-off is NOT inferred. It did not exist in v1, so asserting it on his
+ * behalf would put work into the office's export that he never submitted.
+ * Migrated work lands in the pending pile for him to sign off deliberately.
+ */
+function migrateProgress(progress: JobProgress | V1Progress | undefined): JobProgress {
+  const v1 = (progress ?? {}) as V1Progress & Partial<JobProgress>;
+
+  // Already v2: normalise absent fields to null so nothing reads as undefined.
+  if ('doneAt' in v1 || 'signedOffAt' in v1) {
+    return {
+      doneAt: v1.doneAt ?? null,
+      signedOffAt: v1.signedOffAt ?? null,
+      completedBy: v1.completedBy ?? null,
+      updatedAt: v1.updatedAt ?? new Date().toISOString(),
+    };
+  }
+
+  const finished = v1.completedAt ?? null;
+
+  return {
+    doneAt: finished,
+    signedOffAt: null,
+    completedBy: finished === null ? null : (v1.completedBy ?? null),
+    updatedAt: v1.updatedAt ?? finished ?? new Date().toISOString(),
+  };
+}
+
 export function migrate(vault: Vault): Vault {
   const settings = { ...emptySettings(), ...vault.settings };
   settings.view = { ...DEFAULT_VIEW, ...vault.settings?.view };
+
+  // A v1 filter such as `activated` matches nothing in v2, so the app would
+  // open on an empty list and look broken rather than migrated.
+  if (!KNOWN_STATUS_FILTERS.has(settings.view.status)) {
+    settings.view.status = 'all';
+  }
 
   return {
     schemaVersion: SCHEMA_VERSION,
     packs: (vault.packs ?? []).map((pack) => ({
       ...pack,
-      jobs: (pack.jobs ?? []).map((job) => ({ ...job, history: job.history ?? [] })),
+      jobs: (pack.jobs ?? []).map((job) => ({
+        ...job,
+        // Rebuilt, not spread over: spreading would carry every v1 field along
+        // inside the encrypted blob for the life of the vault.
+        progress: migrateProgress(job.progress),
+        history: job.history ?? [],
+      })),
     })),
     activePackId: vault.activePackId ?? null,
     settings,
