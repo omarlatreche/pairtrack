@@ -26,8 +26,9 @@ fault find and repair, exchange frame work, PCPs, DPs, footway boxes, poles up t
 He works alone, outdoors and underground, in all weather, on a phone, often in gloves,
 frequently with **no mobile signal at all**.
 
-Every week he receives a job pack as a single-sheet Excel file — the current one is
-`<pack-file redacted>`, **442 jobs** for the <exchange redacted> exchange (<exchange-code redacted>).
+Every week he receives a job pack as a single-sheet Excel file — the current one holds
+**442 jobs** for a single exchange. The real filename carries the exchange code and a
+project number, so it is deliberately not recorded here (see `reference/README.md`).
 Despite the job title, *this* pack is not fault repair: it is an **exchange equipment
 migration**, moving 442 circuits off five old shelves onto one new one, via the MDF.
 That is why the workflow has three gates rather than a single done/not-done.
@@ -230,7 +231,7 @@ enough. No icon package — inline SVG.
 
 ### 7.2 Global chrome
 
-- Header: pack name (`<exchange-code redacted> <pack-no redacted>`), a **progress ring** (`137 / 442`), and a session
+- Header: pack name (as imported), a **progress ring** (`137 / 442`), and a session
   counter (`23 done today · 1h 42m`).
 - **All primary controls live in the bottom third of the screen** — that is where a
   thumb reaches on a phone held one-handed.

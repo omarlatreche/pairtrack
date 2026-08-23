@@ -28,6 +28,24 @@ const RESET = '\u001b[0m';
 const FORBIDDEN_EXT = new Set(['.xlsx', '.xls', '.xlsm', '.xlsb', '.csv', '.ptbak']);
 
 /**
+ * Raster images are forbidden outright anywhere under `reference/`.
+ *
+ * A screenshot of the live tool cannot be content-scanned, so it can only ever
+ * be judged by eye — and a §9.8 judgement recorded as "four legible job
+ * numbers" turned out, on a file-by-file review, to have missed a named
+ * individual in the header of eight images, an internal third-party domain, and
+ * four real MDF bar pairs matching a pattern this very file bans in text.
+ *
+ * Forbidding the file type is the only control a scanner can genuinely enforce.
+ * If a diagram is ever needed here, draw it as SVG: it is text, so it gets
+ * scanned like everything else.
+ */
+const FORBIDDEN_IMAGE_EXT = new Set([
+  '.png', '.jpg', '.jpeg', '.gif', '.webp', '.bmp', '.tif', '.tiff', '.heic', '.avif',
+]);
+const FORBIDDEN_IMAGE_UNDER = /^reference\//;
+
+/**
  * Paths exempt from *content* scanning — for the waivable patterns only.
  *
  * A `neverExempt` pattern (the telephone number) still runs against every file
@@ -38,9 +56,13 @@ const FORBIDDEN_EXT = new Set(['.xlsx', '.xls', '.xlsm', '.xlsb', '.csv', '.ptba
  * how a worked example containing a real circuit number would get in.
  */
 const CONTENT_EXEMPT = [
-  // The declared §9.8 exception: four real job numbers are legible in these
-  // screenshots. Binary, so content scanning would not see them anyway.
-  /^reference\/.*\.(png|jpe?g|gif|webp)$/,
+  // NOTE: `reference/*.png` used to be exempted here, on the reasoning that
+  // content scanning could not see inside a binary anyway. That was true, and
+  // it was the hole: on 2026-08-23 those 15 images were found to contain a
+  // named individual, a third-party internal domain and four real MDF bar
+  // pairs, and no scanner could ever have said so. Images under `reference/`
+  // are now forbidden outright — see FORBIDDEN_IMAGE_UNDER below.
+  //
   // These describe the patterns in order to ban them, so they necessarily
   // contain example shapes. Named individually rather than by directory: a
   // blanket `^docs/` would exempt every file anyone adds there later.
@@ -142,6 +164,17 @@ function scan(files) {
       violations.push({
         file: norm,
         reason: `forbidden file type "${ext}" — job data must never be committed`,
+      });
+      continue;
+    }
+
+    if (FORBIDDEN_IMAGE_UNDER.test(norm) && FORBIDDEN_IMAGE_EXT.has(ext)) {
+      violations.push({
+        file: norm,
+        reason:
+          `image under reference/ ("${ext}") — screenshots of the live tool cannot be ` +
+          'content-scanned and have carried real identifiers before. Write down what it ' +
+          'showed, or draw it as SVG.',
       });
       continue;
     }

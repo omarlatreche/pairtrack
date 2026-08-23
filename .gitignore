@@ -37,3 +37,6 @@ Thumbs.db
 .vscode/*
 !.vscode/extensions.json
 *.swp
+
+# Captured bug list — untracked working context, like SESSION.md
+/BUGS.md
