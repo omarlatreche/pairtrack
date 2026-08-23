@@ -1,5 +1,11 @@
 # PairTrack — build brief for Claude Code
 
+<!-- Every job reference, bar pair and equipment ref in this file is FABRICATED.
+     Asserted deliberately so the scanner runs its patterns here rather than
+     skipping the file by path — a blanket exemption is what let two real
+     values sit in this file unnoticed on a public remote.
+     no-data-scan: synthetic -->
+
 **Paste this whole file into an empty folder as `BRIEF.md`, drop the `reference/`
 folder next to it, then start Claude Code in that folder and say:**
 

@@ -1,5 +1,11 @@
 # Job pack schema — derived from the real file
 
+<!-- Every job reference, bar pair and equipment ref in this file is FABRICATED.
+     Asserted deliberately so the scanner runs its patterns here rather than
+     skipping the file by path — a blanket exemption is what let two real
+     values sit in this file unnoticed on a public remote.
+     no-data-scan: synthetic -->
+
 Source analysed: the live job-pack workbook (58 KB). Its filename carries the exchange
 code and a project number and is deliberately not recorded here.
 **This document deliberately contains no real cell values.** Patterns use `#` for a

@@ -63,11 +63,16 @@ const CONTENT_EXEMPT = [
   // pairs, and no scanner could ever have said so. Images under `reference/`
   // are now forbidden outright — see FORBIDDEN_IMAGE_UNDER below.
   //
-  // These describe the patterns in order to ban them, so they necessarily
-  // contain example shapes. Named individually rather than by directory: a
-  // blanket `^docs/` would exempt every file anyone adds there later.
-  /^reference\/(README|SCHEMA)\.md$/,
-  /^BRIEF\.md$/,
+  // NOTE: `BRIEF.md` and `reference/(README|SCHEMA).md` used to be exempted here
+  // by path. They now carry the `no-data-scan: synthetic` pragma instead. A path
+  // exemption is invisible from inside the file, and it is what allowed a real
+  // bar pair — written out in prose as "frame 01, block U, pair ####" — and two
+  // real job numbers behind fabricated prefixes to sit in BRIEF.md on a public
+  // remote. The pragma is at least greppable and has to be claimed on purpose.
+  //
+  // It is still only as strong as the claim behind it: tests/unit/data.test.ts
+  // asserted "All references in this file are fabricated" while carrying two
+  // real bar pairs. Read the values, do not trust the header.
   /^docs\/(SECURITY|DATA-MODEL|DECISIONS|FIELD-GUIDE)\.md$/,
   /^scripts\/no-data-scan\.mjs$/,
   /^\.githooks\/pre-commit$/,

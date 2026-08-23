@@ -1,5 +1,11 @@
 # PairTrack — reference pack
 
+<!-- Every job reference, bar pair and equipment ref in this file is FABRICATED.
+     Asserted deliberately so the scanner runs its patterns here rather than
+     skipping the file by path — a blanket exemption is what let two real
+     values sit in this file unnoticed on a public remote.
+     no-data-scan: synthetic -->
+
 This folder is the written record of the tool the job pack is currently managed with,
 captured from a phone screen recording. It records *what data exists* and *which
 interactions matter*. Nothing here is a design to copy verbatim — PairTrack should
