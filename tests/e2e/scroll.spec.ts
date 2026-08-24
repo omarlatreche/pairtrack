@@ -92,6 +92,41 @@ test('marking a job does not move the list under his thumb', async ({ page }) =>
   await expect(page.locator('.card--pending')).toHaveCount(1);
 });
 
+test('tapping a PARTIALLY visible card does not haul it to the top', async ({ page }) => {
+  // The case the other test deliberately avoided, and the one he actually hits:
+  // the card at the bottom edge, half off screen, which is exactly the one your
+  // thumb lands on as you work down the list.
+  await setUp(page);
+
+  await page.evaluate(() => window.scrollTo(0, 3000));
+  await page.waitForTimeout(400);
+  const before = await page.evaluate(() => window.scrollY);
+
+  // A point inside the visible sliver of a card straddling the bottom edge.
+  // Tapped by COORDINATE, because locator.click() scrolls the element into view
+  // first and would measure Playwright rather than the app.
+  const DOCK = 120; // fixed dock + safe area at the bottom
+  const point = await page.evaluate((dock) => {
+    for (const card of document.querySelectorAll('.card')) {
+      const rect = card.getBoundingClientRect();
+      // Top on screen and clear of the dock; bottom running off the fold.
+      if (rect.top > 300 && rect.top < window.innerHeight - dock - 40 && rect.bottom > window.innerHeight - dock) {
+        const x = rect.left + rect.width / 2;
+        const y = rect.top + 30;
+        const el = document.elementFromPoint(x, y);
+        if (el && el.closest('.card')) return { x, y };
+      }
+    }
+    return null;
+  }, DOCK);
+  expect(point, 'no partially visible card').not.toBeNull();
+
+  await page.touchscreen.tap(point!.x, point!.y);
+  await page.waitForTimeout(700);
+
+  expect(await page.evaluate(() => window.scrollY)).toBe(before);
+});
+
 test('the pending bar appearing does not disturb the list', async ({ page }) => {
   await setUp(page);
 

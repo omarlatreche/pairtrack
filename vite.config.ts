@@ -1,5 +1,28 @@
+import { execFileSync } from 'node:child_process';
 import { defineConfig } from 'vite';
 import preact from '@preact/preset-vite';
+
+/**
+ * Short commit of the build, shown in Settings next to the version.
+ *
+ * `APP_VERSION` is bumped by hand on release, so every build between releases
+ * reported the same string — and when he said a bug was still happening there
+ * was no way to tell whether he was running the fix. A PWA deliberately serves
+ * its cached copy until the "Update available" bar is tapped, so "which build
+ * is on the phone" is a real question that needs a real answer.
+ *
+ * Falls back to `dev` outside a git checkout; never fails the build.
+ */
+function buildCommit(): string {
+  try {
+    return execFileSync('git', ['rev-parse', '--short', 'HEAD'], {
+      encoding: 'utf8',
+      stdio: ['ignore', 'pipe', 'ignore'],
+    }).trim();
+  } catch {
+    return 'dev';
+  }
+}
 
 /** Tunnel providers allowed to reach a locally-started dev/preview server. */
 const TUNNEL_HOSTS = [
@@ -26,6 +49,7 @@ export default defineConfig(() => {
 
   return {
     base,
+    define: { __BUILD_COMMIT__: JSON.stringify(buildCommit()) },
     plugins: [preact()],
     build: {
       target: 'es2022',

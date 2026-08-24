@@ -16,7 +16,7 @@ import { activePack, commit, getState, setState, updateSettings, type AppState }
 import { headerForRole } from '../../import/columns';
 import { formatStamp } from '../components/format';
 import { BackIcon, LockIcon, WarnIcon } from '../components/Icons';
-import { APP_VERSION } from '../../version';
+import { APP_VERSION, BUILD_COMMIT } from '../../version';
 
 export function SettingsScreen({ state }: { state: AppState }) {
   const vault = state.vault;
@@ -438,7 +438,7 @@ export function SettingsScreen({ state }: { state: AppState }) {
       <section class="section">
         <h2 class="section__title">About</h2>
         <p class="field__hint">
-          PairTrack {APP_VERSION}. No account, no server, no network. Your job data is encrypted
+          PairTrack {APP_VERSION} ({BUILD_COMMIT}). No account, no server, no network. Your job data is encrypted
           on this phone and never leaves it unless you export it.
         </p>
       </section>
