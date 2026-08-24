@@ -3,9 +3,10 @@
 An offline, encrypted job-pack tracker for Openreach frame work. It runs on a phone, in a
 browser, with no signal, no account and no server.
 
-You import the week's spreadsheet, work the pack a job at a time — tick or fail, one
-thumb — and export a file the office recognises. **All job data lives only on the phone,
-encrypted, and never leaves it unless you export it.**
+You import the week's spreadsheet, work the pack a job at a time — one tap, one thumb,
+done or not done — then sign off a batch and export a file the office recognises.
+**All job data lives only on the phone, encrypted, and never leaves it unless you export
+it.**
 
 ---
 
@@ -148,9 +149,13 @@ The source spreadsheet has **nine columns and 442 rows**, as a named Excel table
 reads that table, not the used range — five columns after it are empty but formatted, so
 a naive reader reports fourteen columns.
 
-**Columns A–I are imported truth and are never modified.** Progress (`Ready to activate`,
-`Test status`, `Completed`, notes, `VERT`, `UP`) exists only in the app; the spreadsheet
-has no such columns. Keeping the two apart is what lets you re-import next week's pack and
+**Columns A–I are imported truth and are never modified.** Progress — whether a job is
+done, and whether it has been signed off — exists only in the app; the spreadsheet has no
+such columns.
+
+The app deliberately tracks nothing else. There is no failed state (a job you cannot do
+stays not-done), no notes, and no per-job detail screen: all three were built from
+assumptions about the workflow and removed once the person who does the job said so. Keeping the two apart is what lets you re-import next week's pack and
 keep every tick you have already made.
 
 Re-import matches on job number, shows you exactly what will happen before it commits, and

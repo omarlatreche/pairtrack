@@ -122,6 +122,43 @@ const PATTERNS = [
     re: /\bLLUA\d{6}\b/g,
     neverExempt: false,
   },
+
+  /*
+   * Personal data, as opposed to pack identifiers.
+   *
+   * The patterns above all describe THIS job pack. These describe a person, and
+   * they exist because the failure that actually happened here was a named
+   * individual in a screenshot, not a circuit number in a cell. Nothing in this
+   * app needs an email address, a postcode, a mobile number or a national
+   * insurance number, so any of them appearing in a tracked file is a mistake
+   * regardless of who put it there.
+   *
+   * All four are `neverExempt`: the synthetic pragma is for reference-SHAPED
+   * strings a fixture genuinely needs, and no fixture needs a real person.
+   */
+  {
+    name: 'email address',
+    // package-lock.json carries maintainer addresses from the registry; that is
+    // third-party metadata npm writes, not something an author typed.
+    re: /\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}\b/g,
+    neverExempt: true,
+    skip: /^package-lock\.json$/,
+  },
+  {
+    name: 'UK mobile number',
+    re: /\b07\d{3}[\s-]?\d{6}\b/g,
+    neverExempt: true,
+  },
+  {
+    name: 'UK postcode',
+    re: /\b[A-Z]{1,2}\d[A-Z\d]?\s?\d[A-Z]{2}\b/g,
+    neverExempt: true,
+  },
+  {
+    name: 'National Insurance number',
+    re: /\b[A-CEGHJ-PR-TW-Z]{2}\d{6}[A-D]\b/g,
+    neverExempt: true,
+  },
 ];
 
 /**
@@ -204,7 +241,12 @@ function scan(files) {
 
     const synthetic = claimsSynthetic(text);
 
-    for (const { name, re, neverExempt } of PATTERNS) {
+    for (const { name, re, neverExempt, skip } of PATTERNS) {
+      // A pattern may name files it does not apply to. Used only for
+      // package-lock.json, whose maintainer addresses are written by npm from
+      // the registry rather than typed by anyone here.
+      if (skip !== undefined && skip.test(norm)) continue;
+
       // A `neverExempt` pattern runs against EVERY file. The path exemption
       // used to be applied before this loop, which meant docs/ and reference/
       // were waved through on the telephone-number check as well — the one

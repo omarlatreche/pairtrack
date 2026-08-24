@@ -30,9 +30,8 @@ Everything downstream follows from that split:
 - Re-importing next week's pack refreshes `source` and leaves `progress` untouched.
 - Export writes `source` back verbatim in the original column order, so the file
   round-trips and the office receives something they recognise.
-- The source spreadsheet has **no** progress columns at all. `Ready to Activate`,
-  `Test Status`, `Notes`, `Completed By`, the timestamps, and `VERT` / `UP` exist only
-  here.
+- The source spreadsheet has **no** progress columns at all. Whether a job is done,
+  whether it has been signed off, who by, and the timestamps all exist only here.
 
 The only sanctioned write to `source` is `correctSourceValue()`, used to fix the two
 malformed rows in the pack. It re-derives the bar pair and clears the matching defect
@@ -42,32 +41,41 @@ frame position.
 ## Status is derived, never stored
 
 ```ts
-type JobStatus = 'outstanding' | 'activated' | 'failed' | 'tested' | 'completed';
+type JobStatus = 'outstanding' | 'pending' | 'signed-off';
 ```
 
 `deriveStatus(progress)` is a pure function of the progress fields. There is no `status`
 field anywhere, because a stored status is a second source of truth and it drifts.
 
-### The three gates
+### Done, not done, signed off
 
-The pack is an equipment migration, which is why the workflow has three gates rather than
-a done/not-done flag:
+**This used to be three gates** — `outstanding → activated → tested → completed`, plus a
+`failed` state reachable from any of them. It was built from the old tool's columns and
+from BRIEF §14 assumptions that had never been put to the person who does the job. When he
+was finally asked, the answer was no: done or not done, nothing else (D17).
+
+So there are two facts about a job and both are timestamps:
 
 ```
-outstanding ──▶ activated ──▶ tested ──▶ completed
-     │              │            │
-     └──────────────┴────────────┴──▶ failed   (at any gate)
+outstanding ──tap──▶ pending ──sign off the batch──▶ signed-off
+     ◀──tap──────────────┘
 ```
 
-`currentGate(progress)` returns the gate a tick or a cross applies to *right now*. That is
-what makes one-tap work: he never picks a gate, the app knows which one is next. A failed
-job re-opens at the gate that failed.
+- `doneAt` — ticked at the frame. Stamped when he **taps**, not when the batch is signed
+  off: the moment the work happened is the true one, and it is the only timestamp he said
+  matters.
+- `signedOffAt` — set when the pending pile is signed off, as a batch.
 
-**Timestamps are written by the app, never typed.** Setting a gate writes its timestamp;
-clearing it clears the timestamp. Both directions.
+There is deliberately **no failed state**. A job he cannot do stays not-done, which is
+what "not done" already means; a separate failure state only added a decision at the frame.
 
-Everything is revertible one gate at a time. The transition table lives in
-`src/data/transitions.ts` with its own unit tests.
+**Timestamps are written by the app, never typed.** Tapping writes `doneAt`; tapping again
+clears it. Sign-off is reversible as one undo that restores the original `doneAt` values,
+which re-ticking cannot.
+
+Every change is revertible, and undo reverses exactly what the action counted rather than
+inferring it from the number of jobs touched. `src/data/transitions.ts` holds the
+transitions with their own unit tests.
 
 ## Derived fields
 

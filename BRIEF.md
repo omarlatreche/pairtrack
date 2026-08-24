@@ -6,6 +6,27 @@
      values sit in this file unnoticed on a public remote.
      no-data-scan: synthetic -->
 
+> ## ⚠️ Parts of this brief are SUPERSEDED — do not build from §7 as written
+>
+> This is the original brief, kept as the record of what was first asked for. The
+> **workflow section is no longer what the app does**, and it should not be implemented
+> again from here.
+>
+> The three gates (*Ready to activate → Test → Completed*), the failed state, fail
+> reasons, per-job notes, `VERT` / `UP`, the `locked` flag and the job detail screen were
+> all built from this document and then **removed** — see `docs/DECISIONS.md` **D17**.
+> The app is now: one tap marks a job done, then a batch sign-off. Nothing else.
+>
+> That happened because those features came from §14 assumptions that were never put to
+> the person who does the job. When he was finally asked, five of the eleven questions
+> were answered and **four of the answers were "no, remove it"**. The assumptions were the
+> problem, not the code.
+>
+> **§14 is still live and still worth working through** — the remaining six questions are
+> tracked in `SESSION.md`, and Q1 (does the frame walk really run in alphabetical block
+> order?) is the one to ask first. `docs/DATA-MODEL.md` describes the model as it actually
+> is today.
+
 **Paste this whole file into an empty folder as `BRIEF.md`, drop the `reference/`
 folder next to it, then start Claude Code in that folder and say:**
 

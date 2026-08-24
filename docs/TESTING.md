@@ -45,7 +45,7 @@ Then:
    It is read on your machine. Nothing is uploaded — there is nowhere to upload it to.
 3. Check the detected columns, **Continue**, read the merge summary, **Import**.
 
-You should see: **442 jobs**, the filter chips reading `All 442 · Outstanding 442`,
+You should see: **442 jobs**, the filter chips reading `All 442 · Not done 442`,
 `No ties` / `E/D-side` / `LLU` splitting roughly 217 / 222 / 3, `Frame 01` and
 `Frame 09` splitting 415 / 26, and `Needs attention 2`.
 
@@ -97,12 +97,31 @@ Work through these in order. They are the claims the app makes about itself.
 
 ### 1. One tap does the job
 
-Tap the green tick on the first card. It should immediately show **Activated** with a
-timestamp, the chip counts should change, and an **Undo** bar should appear for six
-seconds. Tap Undo — it should go straight back to Outstanding.
+Tap anywhere on the first card. It should immediately show **Done** with a timestamp, the
+chip counts should change, and an **Undo** bar should appear for six seconds. Tap Undo —
+it should go straight back to Not done.
 
-Tap the tick three times on the same job: *Activated → Tested → Completed*. The tick
-then greys out. Timestamps write themselves; you never type one.
+Tap it again: it toggles straight back. There is no second stage and no failed state.
+Timestamps write themselves; you never type one.
+
+### 1b. Sign-off is a batch, and it is reversible
+
+Mark several jobs, then tap **Sign off all N** in the blue bar. All of them should move to
+**Signed off** in one go, and the bar should disappear.
+
+Tap **Undo**. Every job in that batch should return to Done — **with the original times
+you ticked them**, not the time you pressed undo. Re-ticking by hand could not do that,
+which is the point.
+
+Check the header count while you do it: signing off is not new work, so *"N done this
+session"* should not change when you sign off, and should not change when you undo it.
+
+### 1c. The list stays where you put it
+
+Scroll well down the list, then tap a card. **The list must not move.** Not to the top,
+not by a few hundred pixels, not at all — the card just turns blue where it sits.
+
+Do it again with a card that is half off the bottom edge. Still no movement.
 
 ### 2. It follows the frame, not the spreadsheet
 

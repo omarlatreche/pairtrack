@@ -19,7 +19,8 @@
  * never waive, and that genuinely indicate a leak:
  *
  *   1. a spreadsheet or backup file was committed at any point, ever
- *   2. a customer telephone number appears in any commit
+ *   2. a customer telephone number, or personal data (email, mobile, postcode,
+ *      national insurance number), appears in any commit
  *
  * Job-reference shapes in source and test files are the tree scan's job, where
  * the pragma can be read and reasoned about.
@@ -78,6 +79,36 @@ for (const line of patch.split('\n')) {
 }
 if (sawPhone > 0) {
   problems.push(`${sawPhone} line(s) in history contain a customer telephone number`);
+}
+
+// --- 2b. Personal data in any added line ------------------------------------
+//
+// The patterns above describe this job pack. These describe a PERSON, and they
+// are here because the failure that actually happened was a named individual in
+// a screenshot, not a circuit number in a cell. Nothing in this app needs an
+// email address, a mobile number, a postcode or a national insurance number, so
+// any of them entering history is a mistake whoever wrote it.
+//
+// Lines touching package-lock.json are excluded: npm writes maintainer
+// addresses from the registry, and they are not something an author typed.
+const PERSONAL = [
+  { name: 'email address', re: /\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}\b/ },
+  { name: 'UK mobile number', re: /\b07\d{3}[\s-]?\d{6}\b/ },
+  { name: 'UK postcode', re: /\b[A-Z]{1,2}\d[A-Z\d]?\s?\d[A-Z]{2}\b/ },
+  { name: 'National Insurance number', re: /\b[A-CEGHJ-PR-TW-Z]{2}\d{6}[A-D]\b/ },
+];
+
+let inLockfile = false;
+const personalHits = new Map();
+for (const line of patch.split('\n')) {
+  if (line.startsWith('diff --git ')) inLockfile = line.includes('package-lock.json');
+  if (inLockfile || !line.startsWith('+')) continue;
+  for (const { name, re } of PERSONAL) {
+    if (re.test(line)) personalHits.set(name, (personalHits.get(name) ?? 0) + 1);
+  }
+}
+for (const [name, count] of personalHits) {
+  problems.push(`${count} line(s) in history contain what looks like a ${name}`);
 }
 
 // --- 3. Reference-SHAPED strings that are not on the fabricated allowlist ----
@@ -190,4 +221,4 @@ if (problems.length > 0) {
   process.exit(1);
 }
 
-console.log(`${GREEN}history scan passed${RESET} — no spreadsheet, backup, telephone number or unrecognised job reference in any commit`);
+console.log(`${GREEN}history scan passed${RESET} — no spreadsheet, backup, telephone number, personal data or unrecognised job reference in any commit`);

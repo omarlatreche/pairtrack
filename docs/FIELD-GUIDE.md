@@ -22,30 +22,38 @@ the order you walk it, not the order the office typed it.
 
 | To do this | Do this |
 |---|---|
-| Pass the current stage | Tap the **green tick** |
-| Fail it | Tap the **red cross**, then pick a reason |
+| Mark a job done | **Tap the card.** Anywhere on it |
+| Change your mind | Tap it again |
 | Undo | Tap **Undo** in the bar that appears — you have 6 seconds |
-| See everything about a job | Tap the card body |
+| Sign off what you have done | Tap **Sign off all N** in the blue bar |
 | Find a job the office is asking about | Type the **circuit number** in the search box |
 
-**One tap does one stage.** Tap the tick again on the same job to move it through *Test*,
-and again for *Completed*. The timestamps write themselves.
+**One tap, and that is the whole thing.** There is no second stage, no cross, no reason to
+pick and nothing to type. The timestamp writes itself, at the moment you tap — not when
+you sign off later.
 
-After you mark a job, the next one moves up to the top. You should never have to hunt for
-your place.
+**There is no failed state.** A job you cannot do stays not-done. That is what not-done
+already means.
 
-### The tick moves through three stages
+**Nothing moves under your thumb.** The list stays exactly where you left it when you mark
+a job — the card just turns blue where it sits.
+
+### Done, then signed off
 
 ```
-Ready to activate  →  Test  →  Completed
+Not done  ──tap──▶  Done  ──Sign off all──▶  Signed off
 ```
 
-The button always applies to whichever stage that job is on. The status chip tells you
-where it is, in words as well as colour.
+**Done** is your tick at the frame. **Signed off** is you saying the batch is finished, and
+you do that once for the whole pile rather than job by job. The blue bar tells you how many
+are waiting.
+
+Signing off is reversible: one Undo puts the whole batch back, with the original times you
+ticked them, which re-ticking by hand could never do.
 
 ## Working a filter
 
-Tap **Outstanding** and the jobs you have done drop out of the list as you go, so the next
+Tap **Not done** and the jobs you have done drop out of the list as you go, so the next
 one is always under your thumb.
 
 Other filters worth knowing:
@@ -117,13 +125,7 @@ backup still needs yesterday's one. Take a fresh backup straight after changing 
 **Nothing is lost.** Every tick is saved as you make it. A flat battery or a force-quit
 does not cost you a job.
 
-**Locking a job** (on the job screen) marks it "don't touch" — useful when you are waiting
-on the office. Nothing can be marked while it is locked.
-
 **Next week's pack.** Import it the same way. It matches on job number and keeps
 everything you have already recorded — it tells you exactly what it is going to do before
 it does it.
 
-**Fail reasons are yours.** The ones in the list were written by someone who has not done
-the job. Settings → Fail reasons → change the wording to whatever you would actually
-write. Renaming one does not affect jobs already marked with it.
