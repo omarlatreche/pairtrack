@@ -289,8 +289,16 @@ function ProgressRing({ done, total }: { done: number; total: number }) {
           stroke-dashoffset={circumference * (1 - fraction)}
         />
       </svg>
+      {/*
+        Stacked, not `done/total` on one line. On one line the label outgrows the
+        ring as soon as the done count reaches two digits — measured: 41px of
+        text inside a 38px inner circle at `17/442`, and 48.5px, wider than the
+        whole 46px ring, at `103/442`. Stacked it fits at any pack size, and the
+        digits get bigger rather than smaller.
+      */}
       <span class="ring__label" aria-hidden="true">
-        {done}/{total}
+        <span class="ring__done">{done}</span>
+        <span class="ring__total">{total}</span>
       </span>
     </div>
   );

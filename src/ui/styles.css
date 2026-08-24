@@ -249,11 +249,27 @@ button {
 .ring__label {
   position: absolute;
   inset: 0;
-  display: grid;
-  place-items: center;
-  font-size: 11px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  line-height: 1;
   font-weight: 700;
   font-variant-numeric: tabular-nums;
+}
+
+.ring__done {
+  font-size: 13px;
+}
+
+/* The rule reads as a fraction bar, so the two numbers cannot be mistaken for
+   one. It is as wide as the total beneath it, which is the wider of the two. */
+.ring__total {
+  margin-top: 2px;
+  padding-top: 2px;
+  border-top: 1px solid var(--border-strong);
+  font-size: 10px;
+  color: var(--text-dim);
 }
 
 .icon-button {
@@ -322,10 +338,49 @@ button {
   padding: 0 12px 4px;
   overflow-x: auto;
   scrollbar-width: none;
+  /* So a chip never comes to rest half cut once he has scrolled the row. */
+  scroll-snap-type: x proximity;
+  scroll-padding-inline: 12px;
+  --chiprow-fade: 28px;
 }
 
 .chiprow::-webkit-scrollbar {
   display: none;
+}
+
+/*
+ * The row is wider than a phone and its scrollbar is hidden on purpose, so
+ * without this a chip is guillotined at the screen edge with nothing to say the
+ * row scrolls: it reads as a broken layout, and the chips past the cut are
+ * close to undiscoverable. `data-more` comes from ChipRow and names the side
+ * that still has chips on it. Fading only that side means the fade doubles as
+ * "you have reached the end" when it goes.
+ */
+.chiprow[data-more='end'] {
+  -webkit-mask-image: linear-gradient(to right, #000 calc(100% - var(--chiprow-fade)), transparent);
+  mask-image: linear-gradient(to right, #000 calc(100% - var(--chiprow-fade)), transparent);
+}
+
+.chiprow[data-more='start'] {
+  -webkit-mask-image: linear-gradient(to right, transparent, #000 var(--chiprow-fade));
+  mask-image: linear-gradient(to right, transparent, #000 var(--chiprow-fade));
+}
+
+.chiprow[data-more='both'] {
+  -webkit-mask-image: linear-gradient(
+    to right,
+    transparent,
+    #000 var(--chiprow-fade),
+    #000 calc(100% - var(--chiprow-fade)),
+    transparent
+  );
+  mask-image: linear-gradient(
+    to right,
+    transparent,
+    #000 var(--chiprow-fade),
+    #000 calc(100% - var(--chiprow-fade)),
+    transparent
+  );
 }
 
 .chip {
@@ -333,6 +388,7 @@ button {
   display: inline-flex;
   align-items: center;
   gap: 6px;
+  scroll-snap-align: start;
   /* 44px floor, BRIEF §7.11. These sit in a row that also scrolls sideways,
      so a gloved thumb aiming for one is exactly the mis-hit the floor is for. */
   height: var(--tap);

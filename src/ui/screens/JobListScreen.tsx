@@ -12,6 +12,7 @@ import { applyView, countJobs, JOB_TYPE_LABELS, sortFieldLabel } from '../../dat
 import { headerForRole } from '../../import/columns';
 import { signOffPending, toggleJobDone } from '../../state/actions';
 import { activePack, setState, updateView, type AppState } from '../../state/store';
+import { ChipRow } from '../components/ChipRow';
 import { JobCard } from '../components/JobCard';
 import { SearchIcon, SortIcon, CrossIcon, ImportIcon, ExportIcon } from '../components/Icons';
 import { SortSheet } from '../components/SortSheet';
@@ -143,7 +144,7 @@ export function JobListScreen({ state }: { state: AppState }) {
           )}
         </div>
 
-        <div class="chiprow" role="group" aria-label="Filter by status">
+        <ChipRow label="Filter by status">
           {STATUS_CHIPS.map((filter) => (
             <button
               key={filter}
@@ -167,13 +168,13 @@ export function JobListScreen({ state }: { state: AppState }) {
               <span class="chip__count">{counts.attention}</span>
             </button>
           )}
-        </div>
+        </ChipRow>
 
         {/*
           Second row: the derived dimensions. They change how long a job takes,
           so they belong next to status rather than buried in a menu.
         */}
-        <div class="chiprow" role="group" aria-label="Filter by job type and frame">
+        <ChipRow label="Filter by job type and frame">
           {(Object.keys(JOB_TYPE_LABELS) as JobType[]).map((type) => (
             <button
               key={type}
@@ -199,7 +200,7 @@ export function JobListScreen({ state }: { state: AppState }) {
                 <span class="chip__count">{counts.byFrame[frame]}</span>
               </button>
             ))}
-        </div>
+        </ChipRow>
 
         <div class="sortbar">
           <button type="button" class="sortbar__chip" onClick={() => setSortOpen(true)}>
