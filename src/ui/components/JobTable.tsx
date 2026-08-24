@@ -26,7 +26,7 @@ interface JobTableProps {
 
 export function JobTable({ jobs, pack, view, onToggleDone, onSort }: JobTableProps) {
   // Two exclusions, both to stop a column appearing twice:
-  //   - constant columns are shown once in the pack header, not 442 times
+  //   - constant columns are shown once in the pack header, not on every row
   //   - the columns already rendered as dedicated sortable fields (row number,
   //     job number, bar pair) would otherwise repeat mid-table
   const dedicated = new Set(

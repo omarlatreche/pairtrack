@@ -1,6 +1,6 @@
 # PairTrack — security design and threat model
 
-The job pack contains **442 real customer telephone numbers**, each tied to a named
+The job pack contains **a real customer telephone number for every job**, each tied to a named
 subscriber, their exchange, their frame position and their equipment. This is personal
 data. Losing it is a personal-data breach that very likely engages both GDPR and the
 Openreach / Kelly Group contract terms — not an inconvenience.
@@ -62,7 +62,7 @@ unmissably at setup and requires an explicit acknowledgement.
 |---|---|---|
 | Cipher | AES-GCM, 256-bit | Authenticated: tampering fails loudly rather than decrypting to garbage. |
 | IV | **12 bytes, fresh random per encryption** | 96 bits is the size GCM is specified for. IV reuse under one key is the single catastrophic GCM mistake — `cipher.ts` generates the IV internally and has no parameter for accepting one. A unit test asserts uniqueness across 2,000 encryptions. |
-| Granularity | The whole job store as **one blob** | 442 jobs is well under 1MB. Per-record encryption would multiply the IV-handling surface and would leak the record count. |
+| Granularity | The whole job store as **one blob** | A pack this size is well under 1MB. Per-record encryption would multiply the IV-handling surface and would leak the record count. |
 | Write policy | Debounced ~500ms, write-through | A state change is never left only in memory. A failed write is **reported**, not swallowed, and retried (D16). An import bypasses the debounce entirely. |
 | Re-keying | The blob and the verifier are written in **one transaction** | Split across two writes, an interruption leaves data that *no* passphrase can open (D13). |
 | Rollback | The last **5** encrypted snapshots kept in IndexedDB | Cheap insurance against a bad merge or a corrupted write. |
@@ -102,7 +102,7 @@ Because it is encrypted with his passphrase, **a `.ptbak` file is safe to email,
 or leave in iCloud.** The UI says so, because that is what makes backups actually happen.
 Restore requires the passphrase that encrypted the file.
 
-**Plaintext xlsx/CSV export is different and is treated differently.** It contains 442
+**Plaintext xlsx/CSV export is different and is treated differently.** It contains every
 customer telephone numbers in the clear. Every plaintext export shows an explicit warning
 naming that fact before the file is produced, and `.ptbak` is the default share format.
 

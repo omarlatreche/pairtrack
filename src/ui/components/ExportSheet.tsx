@@ -2,7 +2,7 @@
  * Export sheet — BRIEF §7.9, §9.5.
  *
  * The warning on the plaintext options is not decoration. An exported xlsx or
- * CSV is 442 customer telephone numbers in the clear; a `.ptbak` is ciphertext
+ * CSV is every customer telephone number in the clear; a `.ptbak` is ciphertext
  * and safe to email. The encrypted backup is therefore listed first and styled
  * as the primary action.
  */

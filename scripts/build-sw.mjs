@@ -30,7 +30,7 @@ const files = walk(DIST)
   .sort();
 
 // Everything in dist is precached: the whole app shell, the SheetJS chunk and
-// the icons. 442 jobs of use must never touch the network (BRIEF §3.2).
+// the icons. A day's use must never touch the network (BRIEF §3.2).
 const urls = ['', ...files].map((file) => `${BASE}${file}`);
 
 // A content hash over the precache list gives the cache a version that changes

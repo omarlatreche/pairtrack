@@ -12,7 +12,7 @@ it.**
 
 ## Why it exists
 
-The week's pack is 442 jobs at one exchange. Worked today as a spreadsheet, or through a
+The week's pack is a few hundred jobs at one exchange — the size changes week to week. Worked today as a spreadsheet, or through a
 web tool that needs a live connection and 22 seconds of sideways scrolling to reach the
 one button that matters. Exchange basements, footway boxes and chambers do not have
 signal.
@@ -30,7 +30,7 @@ That is why it looks the way it does:
 | **Frame-walk order is the default sort** | The pack arrives in the order the office generated it. Sorting by the parsed bar pair — frame, then block, then pair number — makes the list follow the order the frame is physically walked. |
 | Status shown as colour **and** text **and** icon | Glare, gloves and colour vision. Never colour alone. |
 | Offline-first, not offline-tolerant | There is no "reconnecting" state, because offline is the normal case. |
-| Everything encrypted at rest | The pack contains 442 customer telephone numbers. That is personal data. |
+| Everything encrypted at rest | The pack carries a customer telephone number for every job. That is personal data. |
 
 ---
 
@@ -145,7 +145,7 @@ See [docs/DECISIONS.md](docs/DECISIONS.md) D10 for the full comparison.
 
 ## How the data works
 
-The source spreadsheet has **nine columns and 442 rows**, as a named Excel table. The app
+The source spreadsheet has **nine columns**, as a named Excel table, and a few hundred rows — how many varies by week. The app
 reads that table, not the used range — five columns after it are empty but formatted, so
 a naive reader reports fourteen columns.
 
@@ -172,7 +172,7 @@ Full detail: [docs/DATA-MODEL.md](docs/DATA-MODEL.md) and
   is ciphertext. This is the default share format and the only thing that gets your work
   back if the phone is lost.
 - **Spreadsheet or CSV** — the nine source columns, verbatim and in the source order, with
-  the progress columns appended. **This file is plaintext and contains 442 customer
+  the progress columns appended. **This file is plaintext and contains a customer telephone number for every job
   telephone numbers.** The app warns before producing one. Send it only to the office, by
   whatever route your contract allows, and delete it from the phone afterwards.
 

@@ -195,8 +195,8 @@ export function SettingsScreen({ state }: { state: AppState }) {
 
           {/*
             This lives in Settings, not on the card. The engineer asked not to
-            have to click into jobs at all (D17), and correcting two rows out of
-            442 is not the job — it is a one-off repair, so it belongs off the
+            have to click into jobs at all (D17), and correcting a couple of bad
+            rows is not the job — it is a one-off repair, so it belongs off the
             main screen entirely rather than as furniture on every card.
           */}
           {corrections.map(({ job, column, defect }) => (

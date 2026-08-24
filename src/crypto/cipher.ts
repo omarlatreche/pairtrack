@@ -1,7 +1,7 @@
 /**
  * AES-GCM encrypt / decrypt — BRIEF §9.3.
  *
- * The whole job store is encrypted as one blob. 442 jobs is well under 1MB, so
+ * The whole job store is encrypted as one blob. A pack this size is well under 1MB, so
  * per-record encryption would buy nothing and would leak the record count.
  *
  * A fresh random 12-byte IV is generated *inside* this module for every

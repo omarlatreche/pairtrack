@@ -152,10 +152,10 @@ export async function parseWorkbook(file: ArrayBuffer): Promise<ParsedSheet> {
    * cell values *verbatim*; SheetJS does not trim them. Trim the header list
    * for display and then look a cell up by the trimmed name and every lookup
    * on a header carrying a trailing space returns undefined, so that column
-   * becomes empty on all 442 rows with nothing reported. The other columns
+   * becomes empty on every row with nothing reported. The other columns
    * still have values, so the row is not blank and nothing downstream notices.
    *
-   * If it landed on `Circuit`, 442 telephone numbers would silently vanish and
+   * If it landed on `Circuit`, every telephone number would silently vanish and
    * search-by-circuit — how the office identifies a job to him over the phone —
    * would simply never match. If it landed on `Job Number`, the natural key is
    * destroyed and next week's re-import keeps nothing.

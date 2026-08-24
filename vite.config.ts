@@ -60,7 +60,7 @@ export default defineConfig(() => {
       // network call, and here is why it is fine". Every browser that supports
       // the es2022 target supports modulepreload natively.
       modulePreload: { polyfill: false },
-      // 442 jobs is nothing, but xlsx is ~900KB. It is dynamically imported so
+      // A pack of a few hundred is nothing, but xlsx is ~900KB. It is dynamically imported so
       // it never blocks first paint; the service worker precaches it so import
       // and export still work offline.
       chunkSizeWarningLimit: 1200,

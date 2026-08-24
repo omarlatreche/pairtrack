@@ -3,7 +3,7 @@
  * 60fps".
  *
  * Deliberately simple: cards are variable height, but only slightly, so an
- * estimated height plus a generous overscan is enough to keep 442 rows smooth
+ * estimated height plus a generous overscan is enough to keep a few hundred rows smooth
  * without the complexity (and the scroll-anchoring bugs) of a measuring
  * virtualiser. Below the threshold everything renders, because 200 cards cost
  * nothing and un-virtualised scrolling is always smoother.
@@ -41,7 +41,7 @@ export function VirtualList<T>({ items, keyFor, renderItem }: VirtualListProps<T
    *
    * It also caused the reported bug. Marking a job scrolls the next one into
    * view, and with only the first rows ever rendered, "the next one" was always
-   * near the top — so every tick threw him back to the start of a 442-row list.
+   * near the top — so every tick threw him back to the start of the list.
    *
    * `getBoundingClientRect()` plus a capturing scroll listener works whichever
    * ancestor actually scrolls, so this cannot silently break again if the shell

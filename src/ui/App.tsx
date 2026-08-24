@@ -268,7 +268,7 @@ export function App() {
   );
 }
 
-/** Progress ring: 137 / 442 at a glance, in the header (BRIEF §7.2). */
+/** Progress ring: done / total at a glance, in the header (BRIEF §7.2). */
 function ProgressRing({ done, total }: { done: number; total: number }) {
   const radius = 19;
   const circumference = 2 * Math.PI * radius;

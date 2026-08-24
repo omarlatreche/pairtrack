@@ -45,7 +45,7 @@ Then:
    It is read on your machine. Nothing is uploaded — there is nowhere to upload it to.
 3. Check the detected columns, **Continue**, read the merge summary, **Import**.
 
-You should see: **442 jobs**, the filter chips reading `All 442 · Not done 442`,
+You should see: **every job in the pack**, the filter chips reading `All N · Not done N`,
 `No ties` / `E/D-side` / `LLU` splitting roughly 217 / 222 / 3, `Frame 01` and
 `Frame 09` splitting 415 / 26, and `Needs attention 2`.
 
@@ -159,7 +159,7 @@ The important one.
 
 1. Load the app, import the pack, then **turn on aeroplane mode**.
 2. Force-quit it. Reopen from the home-screen icon.
-3. It should launch, unlock, and show all 442 jobs.
+3. It should launch, unlock, and show every job in the pack.
 4. Mark twenty jobs. Force-quit again. Reopen.
 5. All twenty should still be there.
 
@@ -192,8 +192,8 @@ ciphertext — safe to email to yourself. Test the round trip: Settings → *Res
 
 ### 10. Next week's pack
 
-Import the same file again. Before anything commits it should say **"442 jobs — 0 new,
-442 matched, 0 removed"** and, if you have marked anything, **"Progress on N jobs will
+Import the same file again. Before anything commits it should say **"N jobs — 0 new,
+N matched, 0 removed"** and, if you have marked anything, **"Progress on N jobs will
 be kept"**. Confirm — your ticks should survive.
 
 ---
@@ -231,7 +231,7 @@ Individually:
 | `npm run check:data` | Scan the working tree for job-pack data |
 | `npm run check:history` | Scan every commit ever made |
 
-The e2e suite generates its own synthetic 442-row pack in a temp directory and deletes
+The e2e suite generates its own synthetic pack in a temp directory and deletes
 it afterwards. **No real pack file is ever needed to run the tests, and none should ever
 be added to the repo** — the fixtures reproduce every shape and both malformed rows from
 the real file using fabricated values.

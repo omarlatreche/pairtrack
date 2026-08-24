@@ -15,7 +15,7 @@
  * matches on — see D17.)
  *
  * `DB` and `New_Equipment` are deliberately absent: both are constant across
- * the whole pack, so repeating them 442 times tells him nothing. They are shown
+ * the whole pack, so repeating them on every card tells him nothing. They are shown
  * once in the pack header instead.
  */
 import { formatBarPair } from '../../data/barPair';

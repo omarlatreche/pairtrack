@@ -285,7 +285,7 @@ if (violations.length > 0) {
   console.error(
     [
       '',
-      '  The job pack is personal data — 442 customer telephone numbers.',
+      '  The job pack is personal data — a customer telephone number for every job.',
       '  Do NOT just delete the file and commit again: if this already reached a',
       '  remote, rewrite history with git filter-repo and treat the repo as leaked.',
       '  See README.md, "If job data is ever committed".',

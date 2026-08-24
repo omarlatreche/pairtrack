@@ -223,7 +223,7 @@ button {
   gap: 4px;
 }
 
-/* Progress ring: 137 / 442 at a glance. */
+/* Progress ring: done / total at a glance. */
 .ring {
   position: relative;
   flex: none;

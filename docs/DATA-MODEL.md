@@ -140,7 +140,7 @@ Matched on `jobNumber`.
 | Job only in the new pack | Added, with empty progress |
 | Job only in the old pack | **Kept and flagged** `missingSince`, never deleted |
 
-A preview states exactly this before anything commits — *"442 jobs — 0 new, 442 matched,
+A preview states exactly this before anything commits — *"N jobs — 0 new, N matched,
 0 removed. Progress on 137 jobs will be kept."* Nothing is ever silently overwritten.
 
 The column mapping is remembered per pack name, so next week is one tap.

@@ -263,7 +263,7 @@ export function JobListScreen({ state }: { state: AppState }) {
         used to sit as the first child of `.list`, directly before VirtualList.
         Appearing on the first tap inserted a sibling ahead of the list, Preact
         reconciles children by position, and VirtualList REMOUNTED with its
-        window reset to row 0. That is what threw him back up a 442-row list
+        window reset to row 0. That is what threw him back up the list
         every time he ticked a job.
       */}
       {pendingCount > 0 && (

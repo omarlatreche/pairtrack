@@ -368,7 +368,7 @@ export function hasPendingSave(): boolean {
  * Backstop: drop any pending plaintext the moment the vault locks.
  *
  * `pending` holds a fully DECRYPTED vault — every job number, every note, all
- * 442 circuit numbers. If a lock happened while a write was still queued, that
+ * every circuit number in the pack. If a lock happened while a write was still queued, that
  * plaintext would otherwise stay on the heap for the life of the page, right
  * through the lock screen and beyond. BRIEF §9.4 says decrypted state is
  * cleared on lock; this is what makes that true of the storage layer rather
@@ -457,7 +457,7 @@ interface V1Progress {
  * `deriveStatus` reads `signedOffAt !== null`. On a v1 record that field is
  * absent, `undefined !== null` is **true**, and every job in an existing vault
  * reads as signed off. A returning engineer would open a week's work and be
- * told all 442 were finished. It affects installed PWAs and every `.ptbak`
+ * told the whole pack was finished. It affects installed PWAs and every `.ptbak`
  * backup, so it cannot be waved through as "old data".
  *
  * **The conversion deliberately under-claims.** Only a job that reached
