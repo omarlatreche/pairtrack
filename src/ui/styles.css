@@ -632,8 +632,8 @@ button {
 }
 
 .signoff--above-toast {
-  /* Clear the toast: its 12px anchor plus its height. */
-  bottom: calc(var(--dock-height) + env(safe-area-inset-bottom) + 78px);
+  /* Clear the toast: its 12px anchor, height, and a 12px visual gap. */
+  bottom: calc(var(--dock-height) + env(safe-area-inset-bottom) + 90px);
 }
 
 .signoff__count {

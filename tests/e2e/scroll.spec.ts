@@ -152,6 +152,7 @@ test('the sign-off bar sits on the dock, and lifts only for the undo toast', asy
       const toast = document.querySelector('.toast')?.getBoundingClientRect();
       return {
         gapToDock: signoff && dock ? Math.round(dock.top - signoff.bottom) : null,
+        gapToToast: signoff && toast ? Math.round(toast.top - signoff.bottom) : null,
         hasToast: toast !== undefined,
       };
     });
@@ -163,6 +164,7 @@ test('the sign-off bar sits on the dock, and lifts only for the undo toast', asy
   const withToast = await geometry();
   expect(withToast.hasToast).toBe(true);
   expect(withToast.gapToDock).toBeGreaterThan(50);
+  expect(withToast.gapToToast).toBeGreaterThanOrEqual(10);
 
   // The toast expires after 6s. The bar must then come down onto the dock —
   // it used to keep the toast's slot reserved forever, leaving it hanging in
