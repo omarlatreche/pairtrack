@@ -548,17 +548,22 @@ button {
  */
 .signoff {
   /*
-   * Fixed above the dock, stacked clear of the undo toast.
+   * Fixed just above the dock — and one row higher only while the undo toast
+   * is actually on screen.
    *
    * It was sticky-to-top first, which put it underneath the fixed header: in
    * the DOM, reported visible, and invisible to the person using it. The toast
-   * already proved this pattern in this app, so it reuses the same anchor and
-   * simply sits one row higher so the two never overlap.
+   * already proved this pattern in this app, so it reuses the same anchor.
+   *
+   * The offset used to be a flat +78px, permanently reserving the toast's slot
+   * whether or not a toast existed. With no undo showing, that left the bar
+   * hanging in the middle of the list above an empty gap — which is what he
+   * saw, and why it only did it when the undo button was gone.
    */
   position: fixed;
   left: 12px;
   right: 12px;
-  bottom: calc(var(--dock-height) + env(safe-area-inset-bottom) + 78px);
+  bottom: calc(var(--dock-height) + env(safe-area-inset-bottom) + 12px);
   z-index: 45;
   display: flex;
   align-items: center;
@@ -568,6 +573,11 @@ button {
   background: color-mix(in srgb, var(--accent) 16%, var(--bg-sunken));
   border: 1px solid var(--accent);
   border-radius: var(--radius);
+}
+
+.signoff--above-toast {
+  /* Clear the toast: its 12px anchor plus its height. */
+  bottom: calc(var(--dock-height) + env(safe-area-inset-bottom) + 78px);
 }
 
 .signoff__count {

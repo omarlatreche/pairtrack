@@ -141,3 +141,36 @@ test('the pending bar appearing does not disturb the list', async ({ page }) => 
 
   expect(await page.evaluate(() => window.scrollY)).toBe(before);
 });
+
+test('the sign-off bar sits on the dock, and lifts only for the undo toast', async ({ page }) => {
+  await setUp(page);
+
+  const geometry = () =>
+    page.evaluate(() => {
+      const signoff = document.querySelector('.signoff')?.getBoundingClientRect();
+      const dock = document.querySelector('.dock')?.getBoundingClientRect();
+      const toast = document.querySelector('.toast')?.getBoundingClientRect();
+      return {
+        gapToDock: signoff && dock ? Math.round(dock.top - signoff.bottom) : null,
+        hasToast: toast !== undefined,
+      };
+    });
+
+  await page.locator('.card').first().click();
+  await expect(page.locator('.signoff')).toBeVisible();
+
+  // While the toast is up, the bar lifts clear of it.
+  const withToast = await geometry();
+  expect(withToast.hasToast).toBe(true);
+  expect(withToast.gapToDock).toBeGreaterThan(50);
+
+  // The toast expires after 6s. The bar must then come down onto the dock —
+  // it used to keep the toast's slot reserved forever, leaving it hanging in
+  // mid-list above an empty gap whenever there was no undo button.
+  await expect(page.locator('.toast')).toBeHidden({ timeout: 10_000 });
+
+  const withoutToast = await geometry();
+  expect(withoutToast.hasToast).toBe(false);
+  expect(withoutToast.gapToDock).toBeLessThan(20);
+  expect(withoutToast.gapToDock).toBeGreaterThanOrEqual(0);
+});

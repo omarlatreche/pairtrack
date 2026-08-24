@@ -267,7 +267,10 @@ export function JobListScreen({ state }: { state: AppState }) {
         every time he ticked a job.
       */}
       {pendingCount > 0 && (
-        <div class="signoff" role="status">
+        <div
+          class={`signoff${state.undo !== null ? ' signoff--above-toast' : ''}`}
+          role="status"
+        >
           <span class="signoff__count">{pendingCount} done, not signed off</span>
           <button
             type="button"
