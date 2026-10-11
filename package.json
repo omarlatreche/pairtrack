@@ -27,7 +27,7 @@
     "check:history": "node scripts/scan-history.mjs"
   },
   "dependencies": {
-    "idb": "^8.0.3",
+    "idb": "^8.0.4",
     "preact": "^10.27.2",
     "xlsx": "https://cdn.sheetjs.com/xlsx-0.20.3/xlsx-0.20.3.tgz"
   },
